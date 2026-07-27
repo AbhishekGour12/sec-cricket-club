@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: Spline Sans, Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;
+  --font-rounded: 'SF Pro Rounded', sans-serif;
+  --font-serif: Georgia, serif;
+}
