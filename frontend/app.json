@@ -1,14 +1,22 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "SEC Cricket Club",
+    "slug": "sec-cricket-club",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "seccricketclub",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/icon.png",
+      "bundleIdentifier": "com.seccricketclub.app",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "supportsTablet": false,
+      "buildNumber": "1",
+      "newArchEnabled": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +26,9 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.frontend"
+      "package": "com.seccricketclub.app",
+      "googleServicesFile": "./google-services.json",
+      "newArchEnabled": true
     },
     "web": {
       "output": "static",
@@ -29,15 +39,36 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#1A2744",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "SEC Cricket Club needs camera access to take your profile photo and visiting card photos.",
+          "photosPermission": "SEC Cricket Club needs photo library access to upload your profile picture, business logo, and visiting card images.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.837780082237-gmj2oqqtv9ek1a4h1pnrnpfjvr59ktnj"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8f3b5bfb-f214-44d1-b725-ee0ce6302ee3"
+      }
     }
   }
 }

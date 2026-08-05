@@ -1,88 +1,84 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Tabs } from 'expo-router';
-import { Platform, Text } from 'react-native';
-
-// Custom lightweight SVG/text icons mapping to avoid icon import resolution issues
-function TabBarIcon({ name, color }: { name: string; color: any }) {
-  // Return placeholder texts with styling acting as modern badges
-  const labels: Record<string, string> = {
-    home: '🏠',
-    calendar: '📅',
-    contacts: '👥',
-    notifications: '📣',
-    person: '👤',
-    settings: '⚙️',
-  };
-  return <Text style={{ fontSize: 20, color }}>{labels[name] || '•'}</Text>;
-}
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors } from '@/theme';
+import { TabNavigationStyles } from '@/components/BottomNavigation';
+import { useApprovalStore } from '../../store/approvalStore';
 
 export default function TabLayout() {
+  const { approvalStatus, fetchApprovalStatus } = useApprovalStore();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
+
+  useEffect(() => {
+    fetchApprovalStatus();
+  }, []);
+
+  const isApproved = approvalStatus === 'approved';
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#0ea5e9', // sky-500
-        tabBarInactiveTintColor: '#64748b', // slate-500
+        headerShown: false,
+        tabBarActiveTintColor: TabNavigationStyles.activeTintColor,
+        tabBarInactiveTintColor: TabNavigationStyles.inactiveTintColor,
         tabBarStyle: {
-          backgroundColor: '#0f172a', // slate-900
-          borderTopColor: '#1e293b', // slate-800
-          height: Platform.OS === 'ios' ? 88 : 60,
-          paddingBottom: Platform.OS === 'ios' ? 30 : 10,
-          paddingTop: 10,
+          ...TabNavigationStyles.tabBar,
+          height: 56 + bottomInset + 8,
+          paddingBottom: bottomInset,
+          paddingTop: 8,
         },
-        headerStyle: {
-          backgroundColor: '#0f172a',
-        },
-        headerTintColor: '#ffffff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
+        tabBarLabelStyle: TabNavigationStyles.labelStyle,
         sceneStyle: {
-          backgroundColor: '#090d16',
+          backgroundColor: Colors.background,
         },
       }}
     >
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="events"
-        options={{
-          title: 'Events',
-          tabBarIcon: ({ color }) => <TabBarIcon name="calendar" color={color} />,
+          title: 'HOME',
+          tabBarIcon: ({ color }) => <MaterialIcons name="verified-user" color={color} size={22} />,
         }}
       />
       <Tabs.Screen
         name="directory"
         options={{
-          title: 'Directory',
-          tabBarIcon: ({ color }) => <TabBarIcon name="contacts" color={color} />,
+          title: 'MEMBERS',
+          tabBarIcon: ({ color }) => <MaterialIcons name="person" color={color} size={22} />,
+          href: isApproved ? undefined : null,
         }}
       />
       <Tabs.Screen
         name="announcements"
         options={{
-          title: 'News',
-          tabBarIcon: ({ color }) => <TabBarIcon name="notifications" color={color} />,
+          title: 'NEWS',
+          tabBarIcon: ({ color }) => <MaterialIcons name="notifications" color={color} size={22} />,
+          href: isApproved ? undefined : null,
+        }}
+      />
+      <Tabs.Screen
+        name="events"
+        options={{
+          title: 'EVENTS',
+          tabBarIcon: ({ color }) => <MaterialIcons name="emoji-events" color={color} size={22} />,
+          href: isApproved ? undefined : null,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <TabBarIcon name="person" color={color} />,
+          href: null,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ color }) => <TabBarIcon name="settings" color={color} />,
+          href: null,
         }}
       />
     </Tabs>
   );
 }
+

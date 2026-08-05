@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "837780082237",
+    "project_id": "sec-cricket-club",
+    "storage_bucket": "sec-cricket-club.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:837780082237:android:7086e0fe585fa2119f2454",
+        "android_client_info": {
+          "package_name": "com.seccricketclub.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "837780082237-4f8lck3si4ga74an91qfuf30185lsfof.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.seccricketclub.app",
+            "certificate_hash": "8cbe0de7e6fa9b6b99adedef0c7337b95fd6a580"
+          }
+        },
+        {
+          "client_id": "837780082237-n5fr5566aibc80v5ula2ssljqivuf98t.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBtlGkE4uMmb8bc7znx_tFtdCUN0ftt9jM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "837780082237-n5fr5566aibc80v5ula2ssljqivuf98t.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "837780082237-gmj2oqqtv9ek1a4h1pnrnpfjvr59ktnj.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.seccricketclub.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

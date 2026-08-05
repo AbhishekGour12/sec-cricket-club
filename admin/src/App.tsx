@@ -1,5 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AdminLayout } from './layouts/AdminLayout';
+import { Login } from './pages/Login';
+import { Members } from './pages/Members';
+import { Notifications } from './pages/Notifications';
 import {
   Trophy,
   Users,
@@ -18,17 +22,17 @@ interface MetricCardProps {
 
 const MetricCard: React.FC<MetricCardProps> = ({ title, value, change, icon }) => {
   return (
-    <div className="bg-slate-900 border border-slate-800/80 rounded-2xl p-6 transition-all duration-200 hover:border-slate-700/80 hover:shadow-lg hover:shadow-sky-500/5">
+    <div className="bg-white border border-slate-200/80 rounded-2xl p-6 transition-all duration-200 hover:border-[#1A2744]/30 hover:shadow-md">
       <div className="flex justify-between items-start">
         <div>
-          <p className="text-sm font-medium text-slate-400">{title}</p>
-          <h3 className="text-3xl font-bold text-white mt-2 tracking-tight">{value}</h3>
+          <p className="text-sm font-semibold text-[#3A4260]">{title}</p>
+          <h3 className="text-3xl font-extrabold text-[#0E1525] mt-2 tracking-tight">{value}</h3>
         </div>
-        <div className="w-12 h-12 rounded-xl bg-slate-800/80 flex items-center justify-center text-sky-400">
+        <div className="w-12 h-12 rounded-xl bg-[#D0D8EE] flex items-center justify-center text-[#1A2744]">
           {icon}
         </div>
       </div>
-      <div className="flex items-center space-x-1 mt-4 text-xs font-semibold text-emerald-400">
+      <div className="flex items-center space-x-1 mt-4 text-xs font-semibold text-[#C41230]">
         <ArrowUpRight size={14} />
         <span>{change}</span>
         <span className="text-slate-500 font-medium ml-1">from last month</span>
@@ -37,14 +41,15 @@ const MetricCard: React.FC<MetricCardProps> = ({ title, value, change, icon }) =
   );
 };
 
-export const App: React.FC = () => {
+// Dashboard Content
+const Dashboard: React.FC = () => {
   return (
     <AdminLayout>
       <div className="space-y-8">
         {/* Header Title */}
         <div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">Dashboard Overview</h1>
-          <p className="text-sm text-slate-400 mt-1">Monitor club metrics, announcements, and match statuses.</p>
+          <h1 className="text-3xl font-extrabold text-[#0E1525] tracking-tight">Dashboard Overview</h1>
+          <p className="text-sm text-[#3A4260] mt-1 font-medium">Monitor club metrics, announcements, and match statuses.</p>
         </div>
 
         {/* Metric Cards Grid */}
@@ -76,27 +81,27 @@ export const App: React.FC = () => {
         </div>
 
         {/* Database & Server Status Panel */}
-        <div className="bg-slate-900 border border-slate-800/80 rounded-2xl p-6">
-          <div className="flex items-center space-x-2 text-sky-400 font-bold mb-4">
-            <Activity size={18} />
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
+          <div className="flex items-center space-x-2 text-[#1A2744] font-extrabold mb-4">
+            <Activity size={18} className="text-[#C41230]" />
             <h2>System Connection Health</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/60 flex items-center justify-between">
+            <div className="bg-[#F0F2F7] p-4 rounded-xl border border-slate-200 flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500 font-bold">POSTGRESQL (SUPABASE)</p>
-                <p className="text-sm text-white font-medium mt-1">aws-0-ap-southeast-1.pooler.supabase.com</p>
+                <p className="text-xs text-[#3A4260] font-bold">POSTGRESQL (SUPABASE)</p>
+                <p className="text-sm text-[#0E1525] font-semibold mt-1">aws-0-ap-southeast-1.pooler.supabase.com</p>
               </div>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                 Connected
               </span>
             </div>
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/60 flex items-center justify-between">
+            <div className="bg-[#F0F2F7] p-4 rounded-xl border border-slate-200 flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500 font-bold">EXPRESS API SERVICE</p>
-                <p className="text-sm text-white font-medium mt-1">http://localhost:5000/api</p>
+                <p className="text-xs text-[#3A4260] font-bold">EXPRESS API SERVICE</p>
+                <p className="text-sm text-[#0E1525] font-semibold mt-1">http://localhost:5000/api</p>
               </div>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                 Online
               </span>
             </div>
@@ -104,6 +109,49 @@ export const App: React.FC = () => {
         </div>
       </div>
     </AdminLayout>
+  );
+};
+
+export const App: React.FC = () => {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('admin_jwt'));
+
+  const handleLoginSuccess = (newToken: string) => {
+    setToken(newToken);
+  };
+
+  return (
+    <Router>
+      <Routes>
+        <Route 
+          path="/login" 
+          element={
+            token ? <Navigate to="/" replace /> : <Login onLoginSuccess={handleLoginSuccess} />
+          } 
+        />
+        <Route 
+          path="/members" 
+          element={
+            token ? <Members /> : <Navigate to="/login" replace />
+          } 
+        />
+        <Route 
+          path="/notifications" 
+          element={
+            token ? <Notifications /> : <Navigate to="/login" replace />
+          } 
+        />
+        <Route 
+          path="/" 
+          element={
+            token ? <Dashboard /> : <Navigate to="/login" replace />
+          } 
+        />
+        <Route 
+          path="*" 
+          element={<Navigate to="/" replace />}
+        />
+      </Routes>
+    </Router>
   );
 };
 

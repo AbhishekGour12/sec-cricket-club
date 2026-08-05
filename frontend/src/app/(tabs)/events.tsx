@@ -1,37 +1,114 @@
-import React from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Colors, Typography, Spacing } from '@/theme';
+import { EventCard } from '@/components/Card';
+import { useApprovalStore } from '../../store/approvalStore';
+import { Redirect } from 'expo-router';
 
 export default function EventsScreen() {
-  const events = [
-    { title: 'Weekend Practice Match', date: 'Jul 29, 2026', time: '7:00 AM', type: 'Practice' },
-    { title: 'SEC Club League Round 1', date: 'Aug 02, 2026', time: '9:00 AM', type: 'League' },
-    { title: 'Monsoon Charity Cup', date: 'Aug 15, 2026', time: '10:00 AM', type: 'Tournament' },
-  ];
+  const { approvalStatus } = useApprovalStore();
+
+  if (approvalStatus !== 'approved') {
+    return <Redirect href="/(tabs)/home" />;
+  }
+
+  // Mock event state to simulate dynamic registrations
+  const [events, setEvents] = useState([
+    {
+      id: 1,
+      title: 'Weekend Practice Match',
+      date: 'Jul 29, 2026',
+      time: '7:00 AM',
+      location: 'SEC Sports Ground, Oval 1',
+      status: 'Upcoming',
+      isRegistered: false,
+    },
+    {
+      id: 2,
+      title: 'SEC Club League Round 1',
+      date: 'Aug 02, 2026',
+      time: '9:00 AM',
+      location: 'SEC Main Cricket Stadium',
+      status: 'Upcoming',
+      isRegistered: true,
+    },
+    {
+      id: 3,
+      title: 'Monsoon Charity Cup',
+      date: 'Aug 15, 2026',
+      time: '10:00 AM',
+      location: 'Green Valley Arena',
+      status: 'Upcoming',
+      isRegistered: false,
+    },
+  ]);
+
+  const handleToggleRegister = (id: number) => {
+    setEvents((prevEvents) =>
+      prevEvents.map((evt) =>
+        evt.id === id ? { ...evt, isRegistered: !evt.isRegistered } : evt
+      )
+    );
+  };
 
   return (
-    <SafeAreaView edges={['top']} className="flex-1 bg-slate-950">
-      <ScrollView className="px-6 py-4" showsVerticalScrollIndicator={false}>
-        <View className="mb-6">
-          <Text className="text-white text-2xl font-extrabold tracking-tight">Club Events</Text>
-          <Text className="text-slate-400 text-xs mt-1">Register for matches and social events.</Text>
+    <SafeAreaView edges={['top']} style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.headerSection}>
+          <Text style={styles.titleText}>Club Events & Matches</Text>
+          <Text style={styles.subtitleText}>
+            Register for matches, practice sessions, and social events.
+          </Text>
         </View>
 
-        <View className="space-y-4">
-          {events.map((evt, idx) => (
-            <View key={idx} className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-              <View className="flex-row justify-between items-center">
-                <View className="bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 rounded-full">
-                  <Text className="text-sky-400 text-[10px] font-bold uppercase">{evt.type}</Text>
-                </View>
-                <Text className="text-slate-500 text-[10px] font-semibold">{evt.date}</Text>
-              </View>
-              <Text className="text-white font-bold text-base mt-2.5">{evt.title}</Text>
-              <Text className="text-slate-400 text-xs mt-1">Time: {evt.time} | SEC Stadium</Text>
-            </View>
+        <View style={styles.listContainer}>
+          {events.map((evt) => (
+            <EventCard
+              key={evt.id}
+              title={evt.title}
+              date={evt.date}
+              time={evt.time}
+              location={evt.location}
+              status={evt.status}
+              isRegistered={evt.isRegistered}
+              onRegisterPress={() => handleToggleRegister(evt.id)}
+              style={styles.cardSpacing}
+            />
           ))}
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  scrollContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  headerSection: {
+    marginBottom: Spacing.lg,
+  },
+  titleText: {
+    ...Typography.heading,
+    color: Colors.text.primary,
+    fontSize: 26,
+  },
+  subtitleText: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.text.secondary,
+    marginTop: Spacing.xs,
+  },
+  listContainer: {
+    marginTop: Spacing.sm,
+  },
+  cardSpacing: {
+    marginBottom: Spacing.md,
+  },
+});

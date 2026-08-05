@@ -2,7 +2,14 @@ import React from 'react';
 import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
+import { LogBox } from 'react-native';
+import { Colors } from '@/theme';
 import '../global.css';
+
+// Keep warnings visible in release builds; silence only while developing.
+if (__DEV__) {
+  LogBox.ignoreAllLogs();
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,22 +27,25 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#0f172a', // slate-900
+            backgroundColor: Colors.primary,
           },
-          headerTintColor: '#fff',
+          headerTintColor: '#FFFFFF',
           headerTitleStyle: {
-            fontWeight: 'bold',
+            fontWeight: '900',
           },
           contentStyle: {
-            backgroundColor: '#090d16', // custom deep dark
+            backgroundColor: Colors.background,
           },
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="otp" options={{ headerShown: false }} />
+        <Stack.Screen name="profile-completion" options={{ headerShown: false }} />
+        <Stack.Screen name="networks" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
     </QueryClientProvider>
   );
 }
+

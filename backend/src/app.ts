@@ -4,14 +4,21 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import routes from './routes';
 import { errorHandler } from './middlewares/errorHandler';
+import path from 'path';
 
 const app: Express = express();
 
 // Middlewares
-app.use(helmet());
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve Static Uploads
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Setup Morgan Logging
 if (process.env.NODE_ENV === 'production') {
