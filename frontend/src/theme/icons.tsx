@@ -42,6 +42,8 @@ export const IconMap = {
   work: 'work',
   camera: 'photo-camera',
   save: 'save',
+  image: 'image',
+  gallery: 'photo-library',
 } as const;
 
 export type IconName = keyof typeof IconMap;

@@ -68,7 +68,7 @@ export const serializePublic = (user: User, viewerId?: number) => {
 
   delete visible.privacy_settings;
   delete visible.bookmarked_members;
-  delete visible.visiting_card;
+  // Visiting card front/back images are visible on member profiles; status remains private.
   delete visible.visiting_card_status;
   delete visible.visiting_card_rejection_reason;
 

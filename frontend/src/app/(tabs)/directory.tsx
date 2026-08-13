@@ -27,7 +27,7 @@ export default function DirectoryScreen() {
 
   const { members, isLoadingMembers, membersError, refetchMembers } = useMembers({
     search: searchQuery.trim() || undefined,
-    limit: 50,
+    limit: 200,
   });
   const { isBookmarked, toggleBookmark, isTogglingBookmark } = useNetwork();
 
@@ -85,24 +85,31 @@ export default function DirectoryScreen() {
       const saved = isBookmarked(member.id);
       return (
         <View key={member.id} style={styles.card}>
-          <Avatar
-            name={member.full_name || 'Member'}
-            size={48}
-            imageUrl={getMediaUrl(member.profile_image)}
-          />
-          <View style={styles.cardInfo}>
-            <Text style={styles.memberName} numberOfLines={1}>
-              {member.full_name || 'Member'}
-            </Text>
-            <Text style={styles.memberRole} numberOfLines={1}>
-              {member.designation || 'Club Member'}
-            </Text>
-            {!!(member.business_name || member.business_category) && (
-              <Text style={styles.memberBusiness} numberOfLines={1}>
-                {[member.business_name, member.business_category].filter(Boolean).join(' · ')}
+          <Pressable
+            style={styles.cardMain}
+            onPress={() => router.push(`/member/${member.id}` as any)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open profile for ${member.full_name || 'member'}`}
+          >
+            <Avatar
+              name={member.full_name || 'Member'}
+              size={48}
+              imageUrl={getMediaUrl(member.profile_image)}
+            />
+            <View style={styles.cardInfo}>
+              <Text style={styles.memberName} numberOfLines={1}>
+                {member.full_name || 'Member'}
               </Text>
-            )}
-          </View>
+              <Text style={styles.memberRole} numberOfLines={1}>
+                {member.designation || 'Club Member'}
+              </Text>
+              {!!(member.business_name || member.business_category) && (
+                <Text style={styles.memberBusiness} numberOfLines={1}>
+                  {[member.business_name, member.business_category].filter(Boolean).join(' · ')}
+                </Text>
+              )}
+            </View>
+          </Pressable>
 
           <Pressable
             onPress={() => handleToggleBookmark(member.id, saved)}
@@ -228,6 +235,12 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     marginVertical: Spacing.sm,
     ...Shadows.sm,
+  },
+  cardMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
   },
   cardInfo: {
     flex: 1,

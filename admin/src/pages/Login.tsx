@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import logo from '../assets/logo.png';
+import { getApiUrl } from '../lib/api';
 
 interface AdminUser {
   id: number;
@@ -37,25 +38,33 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
 
     try {
-      const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const apiURL = getApiUrl();
 
-      // Call our credentials login endpoint
-      const response = await axios.post(`${apiURL}/admin/auth/login`, {
-        email,
-        password,
-      });
+      const response = await axios.post(
+        `${apiURL}/admin/auth/login`,
+        { email, password },
+        { timeout: 20000 }
+      );
 
       const { token, user } = response.data;
+      if (!token) {
+        throw new Error('Login succeeded but no token was returned');
+      }
 
-      // Save credentials and trigger success callback
       localStorage.setItem('admin_jwt', token);
       localStorage.setItem('admin_user', JSON.stringify(user));
+      window.dispatchEvent(new Event('admin-auth-changed'));
       onLoginSuccess(token, user);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       // eslint-disable-next-line no-console
       console.error('Email authentication failure:', err);
-      const errMsg = err.response?.data?.message || err.message || 'Invalid email or password';
+      let errMsg = err.response?.data?.message || err.message || 'Invalid email or password';
+      if (err.code === 'ECONNABORTED') {
+        errMsg = 'Login timed out. Is the backend running on port 5000?';
+      } else if (err.code === 'ERR_NETWORK' || !err.response) {
+        errMsg = `Cannot reach API at ${getApiUrl()}. Check backend is running.`;
+      }
       setError(errMsg);
     } finally {
       setIsLoading(false);

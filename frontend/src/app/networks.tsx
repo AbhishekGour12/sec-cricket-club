@@ -81,24 +81,31 @@ export default function NetworksScreen() {
     return members.map((member) => (
       <View key={member.id} style={styles.card}>
         <View style={styles.cardHeader}>
-          <Avatar
-            name={member.full_name || 'Member'}
-            size={52}
-            imageUrl={getMediaUrl(member.profile_image)}
-          />
-          <View style={styles.cardInfo}>
-            <Text style={styles.memberName} numberOfLines={1}>
-              {member.full_name || 'Member'}
-            </Text>
-            <Text style={styles.memberRole} numberOfLines={1}>
-              {member.designation || 'Club Member'}
-            </Text>
-            {!!member.business_name && (
-              <Text style={styles.memberBusiness} numberOfLines={1}>
-                {member.business_name}
+          <Pressable
+            style={styles.cardMainTap}
+            onPress={() => router.push(`/member/${member.id}` as any)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open profile for ${member.full_name || 'member'}`}
+          >
+            <Avatar
+              name={member.full_name || 'Member'}
+              size={52}
+              imageUrl={getMediaUrl(member.profile_image)}
+            />
+            <View style={styles.cardInfo}>
+              <Text style={styles.memberName} numberOfLines={1}>
+                {member.full_name || 'Member'}
               </Text>
-            )}
-          </View>
+              <Text style={styles.memberRole} numberOfLines={1}>
+                {member.designation || 'Club Member'}
+              </Text>
+              {!!member.business_name && (
+                <Text style={styles.memberBusiness} numberOfLines={1}>
+                  {member.business_name}
+                </Text>
+              )}
+            </View>
+          </Pressable>
           <Pressable
             onPress={() => handleRemove(member.id, member.full_name || 'this member')}
             disabled={isTogglingBookmark}
@@ -208,6 +215,12 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  cardMainTap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 0,
   },
   cardInfo: {
     flex: 1,

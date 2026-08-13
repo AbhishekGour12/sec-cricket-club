@@ -3,9 +3,44 @@ import { connectDatabase, sequelize } from './config/database';
 import { logger } from './utils/logger';
 import dotenv from 'dotenv';
 import { User } from './user/models/User'; // Ensure User model is loaded for database sync
+import { BusinessFlyer } from './user/models/BusinessFlyer'; // Ensure BusinessFlyer model is loaded for database sync
 import { Admin } from './admin/models/Admin'; // Ensure Admin model is loaded for database sync
 import { Notification } from './admin/models/Notification'; // Ensure Notification model is loaded for database sync
+import { Announcement } from './admin/models/Announcement';
+import { AnnouncementRead } from './admin/models/AnnouncementRead';
+import { Event } from './admin/models/Event';
+import { Sponsor } from './admin/models/Sponsor';
+import { EventSponsor } from './admin/models/EventSponsor';
 import bcrypt from 'bcryptjs';
+
+// Associations
+User.hasMany(BusinessFlyer, { foreignKey: 'user_id', as: 'business_flyers', onDelete: 'CASCADE' });
+BusinessFlyer.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+Announcement.hasMany(AnnouncementRead, {
+  foreignKey: 'announcement_id',
+  as: 'reads',
+  onDelete: 'CASCADE',
+});
+AnnouncementRead.belongsTo(Announcement, { foreignKey: 'announcement_id', as: 'announcement' });
+User.hasMany(AnnouncementRead, { foreignKey: 'user_id', as: 'announcement_reads', onDelete: 'CASCADE' });
+AnnouncementRead.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+Event.hasMany(EventSponsor, { foreignKey: 'event_id', as: 'event_sponsors', onDelete: 'CASCADE' });
+EventSponsor.belongsTo(Event, { foreignKey: 'event_id', as: 'event' });
+Sponsor.hasMany(EventSponsor, { foreignKey: 'sponsor_id', as: 'event_sponsors', onDelete: 'CASCADE' });
+EventSponsor.belongsTo(Sponsor, { foreignKey: 'sponsor_id', as: 'sponsor' });
+Event.belongsToMany(Sponsor, {
+  through: EventSponsor,
+  foreignKey: 'event_id',
+  otherKey: 'sponsor_id',
+  as: 'sponsors',
+});
+Sponsor.belongsToMany(Event, {
+  through: EventSponsor,
+  foreignKey: 'sponsor_id',
+  otherKey: 'event_id',
+  as: 'events',
+});
 
 dotenv.config();
 
@@ -20,7 +55,9 @@ const startServer = async () => {
     logger.info('Syncing database models with Supabase Postgres...');
     await sequelize.sync({ alter: true });
     logger.info('Database tables synchronized successfully.');
-    logger.info(`Database models initialized: User (${User.name}), Admin (${Admin.name}), Notification (${Notification.name})`);
+    logger.info(
+      `Database models initialized: User (${User.name}), BusinessFlyer (${BusinessFlyer.name}), Admin (${Admin.name}), Notification (${Notification.name}), Announcement (${Announcement.name}), AnnouncementRead (${AnnouncementRead.name}), Event (${Event.name}), Sponsor (${Sponsor.name}), EventSponsor (${EventSponsor.name})`,
+    );
 
     // Seed default admin user in Admins table if not exists or update credentials if needed
     const adminEmail = 'admin@gmail.com';

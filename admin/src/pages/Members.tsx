@@ -29,10 +29,20 @@ import {
   Instagram,
   Facebook,
   Linkedin,
-  EyeOff
+  EyeOff,
+  Image as ImageIcon
 } from 'lucide-react';
 import { AdminLayout } from '../layouts/AdminLayout';
 import { MemberEditModal, Achievement, PrivacySettings } from '../components/MemberEditModal';
+
+interface BusinessFlyer {
+  id: number;
+  user_id: number;
+  image_url: string;
+  display_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
 
 interface Member {
   id: number;
@@ -58,6 +68,7 @@ interface Member {
   business_logo?: string;
   visiting_card?: string;
   business_images?: string[];
+  business_flyers?: BusinessFlyer[];
   city?: string;
   state?: string;
   country?: string;
@@ -169,7 +180,7 @@ export const Members: React.FC = () => {
   const [importMode, setImportMode] = useState<'create_only' | 'create_update'>('create_only');
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
-  const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  const apiURL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api';
   const token = localStorage.getItem('admin_jwt');
 
   // Synchronize Tab with URL query parameter
@@ -579,6 +590,40 @@ export const Members: React.FC = () => {
       }
     }
     return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+  };
+
+  const handleDeleteBusinessFlyer = async (flyerId: number) => {
+    if (!selectedMember) return;
+    if (!window.confirm('Delete this business flyer? This cannot be undone.')) return;
+
+    try {
+      setActionLoading(true);
+      const token = localStorage.getItem('admin_jwt');
+      await axios.delete(
+        `${apiURL}/admin/member/${selectedMember.id}/business-flyers/${flyerId}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      setSelectedMember({
+        ...selectedMember,
+        business_flyers: (selectedMember.business_flyers || []).filter((f) => f.id !== flyerId),
+      });
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to delete business flyer');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const downloadImage = (path: string, fileName: string) => {
+    const url = getImageUrl(path);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
   };
 
   const getStatusBadge = (approvalStatus: string) => {
@@ -1634,6 +1679,71 @@ export const Members: React.FC = () => {
                       ) : (
                         <div className="py-6 text-center text-xs text-[#7A85A0] italic">
                           No business showcase images uploaded.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Business Flyers */}
+                    <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase flex items-center gap-1.5">
+                          <ImageIcon size={12} />
+                          Business Flyers
+                        </span>
+                        <span className="text-[10px] font-bold text-[#C41230]">
+                          {(selectedMember.business_flyers || []).length} / 5
+                        </span>
+                      </div>
+                      {(selectedMember.business_flyers || []).length > 0 ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          {(selectedMember.business_flyers || []).map((flyer) => (
+                            <div
+                              key={flyer.id}
+                              className="relative group rounded-lg overflow-hidden border border-slate-200 bg-[#F0F2F7]"
+                            >
+                              <img
+                                src={getImageUrl(flyer.image_url)}
+                                alt={`Business Flyer ${flyer.display_order + 1}`}
+                                className="w-full h-28 object-cover"
+                              />
+                              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 flex gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <a
+                                  href={getImageUrl(flyer.image_url)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex-1 bg-white/90 hover:bg-white text-[#1A2744] text-[10px] font-bold py-1.5 rounded-md text-center"
+                                >
+                                  View
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    downloadImage(
+                                      flyer.image_url,
+                                      `flyer-${selectedMember.id}-${flyer.id}.jpg`,
+                                    )
+                                  }
+                                  className="flex-1 bg-white/90 hover:bg-white text-[#1A2744] text-[10px] font-bold py-1.5 rounded-md flex items-center justify-center gap-1"
+                                >
+                                  <Download size={10} />
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={actionLoading}
+                                  onClick={() => handleDeleteBusinessFlyer(flyer.id)}
+                                  className="flex-1 bg-[#C41230] hover:bg-[#9E0E27] text-white text-[10px] font-bold py-1.5 rounded-md flex items-center justify-center gap-1 disabled:opacity-60"
+                                >
+                                  <Trash2 size={10} />
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="py-6 text-center text-xs text-[#7A85A0] italic">
+                          No business flyers uploaded.
                         </div>
                       )}
                     </div>

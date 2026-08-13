@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Alert } from 'react-native';
 import { Colors, Typography, Spacing, Radius, Shadows, ThemeIcon } from '@/theme';
+import { SectionHeader } from '@/components/Layout';
 import type { Achievement } from '../../services/authApi';
 
 interface AchievementsEditorProps {
@@ -65,10 +66,7 @@ export const AchievementsEditor: React.FC<AchievementsEditorProps> = ({
 
   return (
     <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <ThemeIcon name="trophy" size={16} color={Colors.secondary} />
-        <Text style={styles.sectionTitle}>Club Accomplishments &amp; Awards</Text>
-      </View>
+      <SectionHeader title="Club Accomplishments & Awards" style={styles.sectionHeader} />
 
       {achievements.length === 0 && !isAdding && (
         <Text style={styles.emptyText}>
@@ -153,18 +151,7 @@ const styles = StyleSheet.create({
     ...Shadows.sm,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  sectionTitle: {
-    ...Typography.caption,
-    fontWeight: '900',
-    fontSize: 12,
-    letterSpacing: 1,
-    color: Colors.text.outline,
-    textTransform: 'uppercase',
+    marginTop: 0,
   },
   emptyText: {
     ...Typography.caption,
@@ -174,9 +161,9 @@ const styles = StyleSheet.create({
   achievementRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFBF2',
+    backgroundColor: Colors.background,
     borderWidth: 1,
-    borderColor: '#F5E4C3',
+    borderColor: 'rgba(122, 133, 160, 0.15)',
     borderRadius: Radius.md,
     padding: Spacing.md,
     marginBottom: Spacing.sm,

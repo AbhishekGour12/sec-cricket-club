@@ -1,5 +1,7 @@
 import admin from '../config/firebase';
 import { logger } from '../utils/logger';
+import User from '../user/models/User';
+import { Op } from 'sequelize';
 
 export interface PushPayload {
   title: string;
@@ -7,20 +9,61 @@ export interface PushPayload {
   data?: Record<string, string>;
 }
 
+const isExpoPushToken = (token: string) =>
+  token.startsWith('ExponentPushToken') || token.startsWith('ExpoPushToken');
+
+async function sendExpoPushNotification(token: string, payload: PushPayload): Promise<void> {
+  const response = await fetch('https://exp.host/--/api/v2/push/send', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Accept-Encoding': 'gzip, deflate',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      to: token,
+      sound: 'default',
+      title: payload.title,
+      body: payload.body,
+      data: payload.data ?? {},
+      priority: 'high',
+      channelId:
+        payload.data?.type === 'event'
+          ? 'events'
+          : payload.data?.type === 'announcement'
+            ? 'announcements'
+            : 'default',
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Expo push failed: ${response.status} ${text}`);
+  }
+}
+
 /**
- * Send a push notification to a single FCM token.
- * Silently skips if Firebase Admin is not initialised or token is missing.
+ * Send a push notification to a single FCM / Expo push token.
+ * Silently skips if token is missing.
  */
-export async function sendPushNotification(fcmToken: string | null | undefined, payload: PushPayload): Promise<void> {
+export async function sendPushNotification(
+  fcmToken: string | null | undefined,
+  payload: PushPayload,
+): Promise<void> {
   if (!fcmToken) return;
 
-  // Firebase Admin app is only initialised when valid credentials exist
-  if (!admin.apps.length) {
-    logger.warn('[Notification] Firebase Admin not initialised — skipping push.');
-    return;
-  }
-
   try {
+    if (isExpoPushToken(fcmToken)) {
+      await sendExpoPushNotification(fcmToken, payload);
+      logger.info('[Notification] Expo push sent');
+      return;
+    }
+
+    if (!admin.apps.length) {
+      logger.warn('[Notification] Firebase Admin not initialised — skipping FCM push.');
+      return;
+    }
+
     const message: admin.messaging.Message = {
       token: fcmToken,
       notification: {
@@ -32,7 +75,14 @@ export async function sendPushNotification(fcmToken: string | null | undefined, 
         priority: 'high',
         notification: {
           sound: 'default',
-          channelId: 'default',
+          channelId:
+            payload.data?.type === 'event'
+              ? 'events'
+              : payload.data?.type === 'announcement'
+                ? 'announcements'
+                : 'default',
+          icon: 'notification_icon',
+          color: '#1A2744',
         },
       },
       apns: {
@@ -46,9 +96,34 @@ export async function sendPushNotification(fcmToken: string | null | undefined, 
     };
 
     const response = await admin.messaging().send(message);
-    logger.info(`[Notification] Push sent — messageId: ${response}`);
+    logger.info(`[Notification] FCM push sent — messageId: ${response}`);
   } catch (err: any) {
-    // Log but never crash the caller — notification failure must not affect the API response
     logger.error('[Notification] Failed to send push notification:', err?.message ?? err);
   }
+}
+
+/**
+ * Broadcast a push to all approved + active members that have a push token.
+ */
+export async function broadcastToApprovedMembers(payload: PushPayload): Promise<number> {
+  const members = await User.findAll({
+    where: {
+      approval_status: 'approved',
+      status: 'active',
+      fcm_token: { [Op.ne]: null as any },
+    },
+    attributes: ['id', 'fcm_token'],
+  });
+
+  let sent = 0;
+  await Promise.all(
+    members.map(async (member) => {
+      if (!member.fcm_token) return;
+      await sendPushNotification(member.fcm_token, payload);
+      sent += 1;
+    }),
+  );
+
+  logger.info(`[Notification] Broadcast to ${sent} approved members — ${payload.title}`);
+  return sent;
 }

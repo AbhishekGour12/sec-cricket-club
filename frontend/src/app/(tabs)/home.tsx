@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Radius, Shadows, ThemeIcon } from '@/theme';
 import { Avatar } from '@/components/Avatar';
-import { SectionHeader, Divider } from '@/components/Layout';
+import { SectionHeader } from '@/components/Layout';
 import { AnnouncementCard } from '@/components/Card';
 import { useAuth } from '../../hooks/useAuth';
 import { api } from '../../services/api';
@@ -16,6 +16,12 @@ import {
   mergeProfileCompletionFields,
 } from '../../utils/profileCompletion';
 import { getMediaUrl } from '../../utils/mediaUrl';
+import { useLatestAnnouncements } from '../../hooks/useAnnouncements';
+import { useAnnouncementStore } from '../../store/announcementStore';
+import { useFeaturedEventsQuery, useEventsQuery } from '../../hooks/useEvents';
+import { useEventStore } from '../../store/eventStore';
+import { FeaturedEventsCarousel } from '@/components/Events/FeaturedEventsCarousel';
+import { UpcomingEventsPreview } from '@/components/Events/UpcomingEventsPreview';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -23,6 +29,38 @@ export default function HomeScreen() {
   const { approvalStatus, rejectedReason, fetchApprovalStatus } = useApprovalStore();
   const profileDraft = useProfileStore((state) => state.formData);
   const effectiveProfile = mergeProfileCompletionFields(user, profileDraft);
+  const { latestToast, clearToast } = useAnnouncementStore();
+  const {
+    latestToast: eventToast,
+    clearToast: clearEventToast,
+    setViewMode,
+  } = useEventStore();
+  const isApproved = approvalStatus === 'approved';
+  const {
+    events: featuredEvents,
+    isLoading: featuredLoading,
+  } = useFeaturedEventsQuery(10, isApproved);
+  const {
+    events: upcomingEventsRaw,
+    isLoading: upcomingLoading,
+  } = useEventsQuery({ limit: 8, enabled: isApproved });
+
+  // Cleaner Home UX: prefer non-featured in compact Upcoming; if all are featured, still show them.
+  const featuredIds = new Set(featuredEvents.map((e) => e.id));
+  const nonFeaturedUpcoming = upcomingEventsRaw.filter((e) => !featuredIds.has(e.id));
+  const upcomingPreview = (
+    nonFeaturedUpcoming.length > 0 ? nonFeaturedUpcoming : upcomingEventsRaw
+  ).slice(0, 4);
+
+  const openEvent = (id: number) => router.push(`/event/${id}` as any);
+  const openEventsList = () => {
+    setViewMode('list');
+    router.push('/(tabs)/events');
+  };
+  const openEventsCalendar = () => {
+    setViewMode('calendar');
+    router.push('/(tabs)/events');
+  };
 
   useEffect(() => {
     // Seed from the user object immediately so there's no flicker —
@@ -227,43 +265,81 @@ export default function HomeScreen() {
         {/* Profile completeness badge for approved members who haven't finished their profile */}
         {renderCompletenessCard()}
 
-        {/* Featured Next Club Match Widget */}
-        <View style={styles.featuredCard}>
-          <View style={styles.featuredBadge}>
-            <ThemeIcon name="sports" size={14} color="#FFFFFF" style={styles.badgeIcon} />
-            <Text style={styles.featuredBadgeText}>Next Club Match</Text>
-          </View>
-          <Text style={styles.featuredMatchName}>SEC vs Knights XI</Text>
-          <Text style={styles.featuredMatchTime}>Sunday, 30th July at 9:00 AM</Text>
-          
-          <Divider style={styles.featuredDivider} />
-          
-          <View style={styles.featuredFooter}>
-            <View>
-              <Text style={styles.footerLabel}>Location</Text>
-              <Text style={styles.footerValue}>SEC Sports Ground</Text>
+        {latestToast ? (
+          <Pressable
+            style={styles.announcementToast}
+            onPress={() => {
+              router.push(`/announcement/${latestToast.id}` as any);
+              clearToast();
+            }}
+          >
+            <ThemeIcon name="notification" size={18} color="#FFFFFF" />
+            <View style={styles.announcementToastTextCol}>
+              <Text style={styles.announcementToastEyebrow}>
+                {latestToast.message || 'Announcement'}
+              </Text>
+              <Text style={styles.announcementToastTitle} numberOfLines={1}>
+                {latestToast.title}
+              </Text>
             </View>
-            <Pressable
-              style={styles.reminderButton}
-              onPress={() => alert('Reminder Set')}
-            >
-              <Text style={styles.reminderButtonText}>Set Reminder</Text>
+            <Pressable onPress={clearToast} hitSlop={8}>
+              <ThemeIcon name="close" size={18} color="#FFFFFF" />
             </Pressable>
-          </View>
-        </View>
+          </Pressable>
+        ) : null}
+
+        {eventToast ? (
+          <Pressable
+            style={[styles.announcementToast, styles.eventToast]}
+            onPress={() => {
+              router.push(`/event/${eventToast.id}` as any);
+              clearEventToast();
+            }}
+          >
+            <ThemeIcon name="event" size={18} color="#FFFFFF" />
+            <View style={styles.announcementToastTextCol}>
+              <Text style={styles.announcementToastEyebrow}>
+                {eventToast.message || 'New Club Event'}
+              </Text>
+              <Text style={styles.announcementToastTitle} numberOfLines={1}>
+                {eventToast.title}
+              </Text>
+            </View>
+            <Pressable onPress={clearEventToast} hitSlop={8}>
+              <ThemeIcon name="close" size={18} color="#FFFFFF" />
+            </Pressable>
+          </Pressable>
+        ) : null}
+
+        {isApproved ? (
+          <>
+            <FeaturedEventsCarousel
+              events={featuredEvents}
+              isLoading={featuredLoading}
+              onPressEvent={openEvent}
+            />
+            <UpcomingEventsPreview
+              events={upcomingPreview}
+              isLoading={upcomingLoading}
+              onPressEvent={openEvent}
+              onPressAllCalendar={openEventsCalendar}
+              onPressViewAll={openEventsList}
+            />
+          </>
+        ) : null}
 
         {/* Quick Navigation Section */}
         <SectionHeader title="Quick Navigation" />
         <View style={styles.quickNavRow}>
           <Pressable
             style={styles.quickNavCard}
-            onPress={() => router.push('/(tabs)/events')}
+            onPress={openEventsList}
           >
             <View style={[styles.quickNavIconContainer, { backgroundColor: Colors.primaryContainer }]}>
               <ThemeIcon name="sports" size={24} color={Colors.primary} />
             </View>
-            <Text style={styles.quickNavTitle}>Active Matches</Text>
-            <Text style={styles.quickNavSubtitle}>Track live scores</Text>
+            <Text style={styles.quickNavTitle}>Club Events</Text>
+            <Text style={styles.quickNavSubtitle}>Fixtures & gatherings</Text>
           </Pressable>
 
           <Pressable
@@ -284,14 +360,56 @@ export default function HomeScreen() {
           actionLabel="View All"
           onActionPress={() => router.push('/(tabs)/announcements')}
         />
-        <AnnouncementCard
-          title="Annual Membership Renewals Open"
-          content="Please make sure to renew your subscriptions before the upcoming league match on next Sunday. Forms and payment details are available at the clubhouse or under Settings."
-          date="July 28, 2026"
-          author="Admin Team"
-        />
+        <HomeAnnouncements />
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function HomeAnnouncements() {
+  const router = useRouter();
+  const { announcements, isLoading } = useLatestAnnouncements(3, true);
+
+  if (isLoading) {
+    return (
+      <View style={styles.homeNewsLoading}>
+        <ActivityIndicator color={Colors.primary} />
+      </View>
+    );
+  }
+
+  if (announcements.length === 0) {
+    return (
+      <View style={styles.homeNewsEmpty}>
+        <Text style={styles.homeNewsEmptyText}>No announcements published yet.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      {announcements.map((item) => (
+        <AnnouncementCard
+          key={item.id}
+          title={item.title}
+          content={item.short_description}
+          date={
+            item.publish_date || item.created_at
+              ? new Date(item.publish_date || item.created_at!).toLocaleDateString(undefined, {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                })
+              : ''
+          }
+          coverImage={getMediaUrl(item.cover_image)}
+          priority={item.priority}
+          isPinned={item.is_pinned}
+          isNew={!!item.is_new}
+          onPress={() => router.push(`/announcement/${item.id}` as any)}
+        />
+      ))}
+    </>
   );
 }
 
@@ -392,75 +510,6 @@ const styles = StyleSheet.create({
   },
   btnChevron: {
     marginLeft: 6,
-  },
-  featuredCard: {
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.lg,
-    padding: Spacing.xl,
-    marginBottom: Spacing.lg,
-    ...Shadows.md,
-  },
-  featuredBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.secondary,
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.xl,
-    marginBottom: Spacing.sm,
-  },
-  badgeIcon: {
-    marginRight: Spacing.xs,
-  },
-  featuredBadgeText: {
-    ...Typography.caption,
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 10,
-    textTransform: 'uppercase',
-  },
-  featuredMatchName: {
-    ...Typography.heading,
-    fontSize: 24,
-    color: '#FFFFFF',
-  },
-  featuredMatchTime: {
-    ...Typography.body,
-    fontSize: 14,
-    color: Colors.primaryContainer,
-    marginTop: Spacing.xs,
-  },
-  featuredDivider: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginVertical: Spacing.md,
-  },
-  featuredFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  footerLabel: {
-    ...Typography.caption,
-    color: Colors.primaryContainer,
-    fontWeight: '700',
-  },
-  footerValue: {
-    ...Typography.body,
-    fontSize: 13,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  reminderButton: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.md,
-  },
-  reminderButtonText: {
-    ...Typography.button,
-    color: Colors.primary,
-    fontSize: 12,
   },
   quickNavRow: {
     flexDirection: 'row',
@@ -584,5 +633,52 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '600',
+  },
+  homeNewsLoading: {
+    paddingVertical: Spacing.xl,
+    alignItems: 'center',
+  },
+  homeNewsEmpty: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    ...Shadows.sm,
+  },
+  homeNewsEmptyText: {
+    ...Typography.caption,
+    color: Colors.text.outline,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  announcementToast: {
+    marginBottom: Spacing.md,
+    backgroundColor: Colors.secondary,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    ...Shadows.sm,
+  },
+  eventToast: {
+    backgroundColor: Colors.primary,
+  },
+  announcementToastTextCol: {
+    flex: 1,
+  },
+  announcementToastEyebrow: {
+    ...Typography.caption,
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  announcementToastTitle: {
+    ...Typography.caption,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    marginTop: 2,
   },
 });

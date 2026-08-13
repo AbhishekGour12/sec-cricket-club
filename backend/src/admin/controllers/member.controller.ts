@@ -31,7 +31,29 @@ export class AdminMemberController {
         res.status(404).json({ error: 'Not Found', message: 'Member not found' });
         return;
       }
-      res.status(200).json({ member });
+
+      const BusinessFlyer = (await import('../../user/models/BusinessFlyer')).default;
+      const flyers = await BusinessFlyer.findAll({
+        where: { user_id: member.id },
+        order: [
+          ['display_order', 'ASC'],
+          ['id', 'ASC'],
+        ],
+      });
+
+      res.status(200).json({
+        member: {
+          ...member.toJSON(),
+          business_flyers: flyers.map((f) => ({
+            id: f.id,
+            user_id: f.user_id,
+            image_url: f.image_url,
+            display_order: f.display_order,
+            created_at: f.created_at,
+            updated_at: f.updated_at,
+          })),
+        },
+      });
     } catch (error) {
       logger.error('Admin getMemberById error:', error);
       res.status(500).json({ error: 'Internal Server Error', message: 'Failed to retrieve member' });

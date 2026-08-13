@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { 
-  Trophy, 
   Users, 
   Calendar, 
   Megaphone, 
@@ -14,6 +13,7 @@ import {
   Search,
   LayoutDashboard
 } from 'lucide-react';
+import logo from '../assets/logo.png';
 
 interface SidebarItemProps {
   icon: React.ReactNode;
@@ -63,7 +63,7 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const token = localStorage.getItem('admin_jwt');
-  const apiURL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  const apiURL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api';
 
   const fetchNotifications = async () => {
     if (!token) return;
@@ -79,7 +79,7 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 10000); // 10s polling
+    const interval = setInterval(fetchNotifications, 30000); // 30s polling
     return () => clearInterval(interval);
   }, [token]);
 
@@ -102,7 +102,8 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
   const handleLogout = () => {
     localStorage.removeItem('admin_jwt');
     localStorage.removeItem('admin_user');
-    navigate('/login');
+    window.dispatchEvent(new Event('admin-auth-changed'));
+    window.location.href = '/login';
   };
 
   const fullName = user?.full_name || 'Admin User';
@@ -180,11 +181,14 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
         <div>
           {/* Logo Section */}
           <div className="h-16 flex items-center justify-between px-6 border-b border-[#243260]">
-            <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 rounded-lg bg-[#C41230] flex items-center justify-center shadow-lg shadow-[#C41230]/30">
-                <Trophy className="text-white" size={20} />
+            <div
+              className="flex items-center space-x-3 cursor-pointer"
+              onClick={() => navigate('/')}
+            >
+              <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center overflow-hidden border border-[#243260] shadow-lg">
+                <img src={logo} alt="SEC Logo" className="w-8 h-8 object-contain" />
               </div>
-              <span className="font-bold text-lg tracking-tight text-white cursor-pointer" onClick={() => navigate('/')}>
+              <span className="font-bold text-lg tracking-tight text-white">
                 SEC Cricket Club
               </span>
             </div>

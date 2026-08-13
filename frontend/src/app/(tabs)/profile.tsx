@@ -15,12 +15,13 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Radius, Shadows, ThemeIcon } from '@/theme';
 import { Avatar } from '@/components/Avatar';
 import { SectionHeader, Divider } from '@/components/Layout';
-import { OutlineButton } from '@/components/Button';
 import { AchievementsEditor } from '@/components/Profile/AchievementsEditor';
 import {
   ContactLinksEditor,
   ContactLinksValue,
 } from '@/components/Profile/ContactLinksEditor';
+import { BusinessFlyersEditor } from '@/components/Profile/BusinessFlyersEditor';
+import { VisitingCardDisplay } from '@/components/Profile/VisitingCardDisplay';
 import { useAuth } from '../../hooks/useAuth';
 import { useApprovalStore } from '../../store/approvalStore';
 import { useProfileEditor } from '../../hooks/useProfileEditor';
@@ -43,7 +44,7 @@ const DEFAULT_PRIVACY: PrivacySettings = {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, refetchUser } = useAuth();
+  const { user, refetchUser, logout, isLoggingOut } = useAuth();
   const { approvalStatus, fetchApprovalStatus } = useApprovalStore();
   const { saveProfile, isSaving } = useProfileEditor();
   const { bookmarkedIds } = useNetwork();
@@ -165,6 +166,24 @@ export default function ProfileScreen() {
     seedFromUser();
   };
 
+  const handleLogout = () => {
+    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await logout();
+          } catch (err) {
+            console.warn('Logout error:', err);
+          }
+          router.replace('/login');
+        },
+      },
+    ]);
+  };
+
   const savedLinks: { label: string; value?: string }[] = [
     { label: 'Primary Phone', value: user?.phone },
     { label: 'Alternate Phone', value: user?.alternate_phone },
@@ -268,24 +287,17 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Editable sections — title + Edit must share the row without clipping */}
-          <View style={styles.editHeaderRow}>
-            <Text style={styles.editHeaderTitle} numberOfLines={1}>
-              Profile Details
-            </Text>
-            {!isEditing && (
-              <Pressable
-                onPress={handleStartEditing}
-                style={styles.editTrigger}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Edit contact details and accomplishments"
-              >
-                <ThemeIcon name="edit" size={16} color={Colors.secondary} />
-                <Text style={styles.editTriggerText}>Edit</Text>
-              </Pressable>
-            )}
-          </View>
+          {/* Visiting Card — front & back images */}
+          <VisitingCardDisplay visitingCard={user?.visiting_card} />
+
+          {/* Business Flyers — managed in profile update (not completion) */}
+          <BusinessFlyersEditor editable={isEditing} />
+
+          <SectionHeader
+            title="Profile Details"
+            actionLabel={!isEditing ? 'Edit' : undefined}
+            onActionPress={!isEditing ? handleStartEditing : undefined}
+          />
 
           {isEditing ? (
             <>
@@ -327,12 +339,12 @@ export default function ProfileScreen() {
             <>
               <AchievementsEditor
                 achievements={user?.achievements ?? []}
-                onChange={() => {}}
+                onChange={() => { }}
                 editable={false}
               />
 
               <View style={styles.detailsCard}>
-                <Text style={styles.detailsTitle}>Contact &amp; Social Links</Text>
+                <Text style={styles.detailsTitle}>Contact &amp; Social Links </Text>
                 {savedLinks.map((item, index) => (
                   <React.Fragment key={item.label}>
                     {index > 0 && <Divider />}
@@ -348,11 +360,44 @@ export default function ProfileScreen() {
             </>
           )}
 
-          <OutlineButton
-            title="Edit Details & Uploads"
+          <Text style={styles.accountTitle}>Account</Text>
+
+          <Pressable
             onPress={() => router.push('/profile-completion')}
-            style={styles.editButton}
-          />
+            style={({ pressed }) => [styles.actionPressable, pressed && styles.actionPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Edit details and uploads"
+          >
+            <View style={styles.editBtnSurface}>
+              <ThemeIcon name="edit" size={20} color="#FFFFFF" />
+              <Text style={styles.actionBtnLabel}>Edit Details & Uploads</Text>
+            </View>
+          </Pressable>
+
+          <Pressable
+            onPress={handleLogout}
+            disabled={isLoggingOut}
+            style={({ pressed }) => [
+              styles.actionPressable,
+              styles.logoutPressable,
+              pressed && styles.actionPressed,
+              isLoggingOut && styles.actionDisabled,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Log out"
+          >
+            <View style={styles.logoutBtnSurface}>
+              {isLoggingOut ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <ThemeIcon name="logout" size={20} color="#FFFFFF" />
+                  <Text style={styles.actionBtnLabel}>Log Out</Text>
+                </>
+              )}
+            </View>
+          </Pressable>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -388,8 +433,11 @@ const styles = StyleSheet.create({
     right: Spacing.md,
     width: 44,
     height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    zIndex: 2,
   },
   networkBadge: {
     position: 'absolute',
@@ -496,33 +544,6 @@ const styles = StyleSheet.create({
     maxWidth: '60%',
     textAlign: 'right',
   },
-  editHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginVertical: Spacing.md,
-    gap: Spacing.sm,
-  },
-  editHeaderTitle: {
-    ...Typography.heading,
-    fontSize: 18,
-    color: Colors.primary,
-    flex: 1,
-    flexShrink: 1,
-  },
-  editTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    minHeight: 44,
-    paddingHorizontal: Spacing.sm,
-    flexShrink: 0,
-  },
-  editTriggerText: {
-    ...Typography.button,
-    fontSize: 14,
-    color: Colors.secondary,
-  },
   saveRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -558,10 +579,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#FFFFFF',
   },
-  editButton: {
-    height: 48,
-    borderRadius: Radius.md,
-    marginTop: Spacing.sm,
-    borderColor: Colors.primary,
+  accountTitle: {
+    marginTop: 40,
+    marginBottom: 20,
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1A2744',
+  },
+  actionPressable: {
+    width: '100%',
+  },
+  logoutPressable: {
+    marginBottom: 32,
+  },
+  actionPressed: {
+    opacity: 0.88,
+  },
+  actionDisabled: {
+    opacity: 0.55,
+  },
+  editBtnSurface: {
+    width: '100%',
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: '#1A2744',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  logoutBtnSurface: {
+    width: '100%',
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: '#C41230',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnLabel: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 10,
   },
 });

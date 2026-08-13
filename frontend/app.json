@@ -20,7 +20,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1A2744",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -28,7 +28,15 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.seccricketclub.app",
       "googleServicesFile": "./google-services.json",
-      "newArchEnabled": true
+      "newArchEnabled": true,
+      "notification": {
+        "icon": "./assets/images/notification-icon.png",
+        "color": "#1A2744"
+      }
+    },
+    "notification": {
+      "icon": "./assets/images/notification-icon.png",
+      "color": "#1A2744"
     },
     "web": {
       "output": "static",
@@ -41,16 +49,25 @@
         {
           "backgroundColor": "#1A2744",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 180
         }
       ],
       "expo-secure-store",
       [
         "expo-image-picker",
         {
-          "cameraPermission": "SEC Cricket Club needs camera access to take your profile photo and visiting card photos.",
-          "photosPermission": "SEC Cricket Club needs photo library access to upload your profile picture, business logo, and visiting card images.",
+          "cameraPermission": "SEC Cricket Club needs camera access to take your profile photo, visiting card photos, and business flyer images.",
+          "photosPermission": "SEC Cricket Club needs photo library access to upload your profile picture, business logo, visiting card, and business flyer images.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#1A2744",
+          "defaultChannel": "default",
+          "sounds": []
         }
       ],
       [

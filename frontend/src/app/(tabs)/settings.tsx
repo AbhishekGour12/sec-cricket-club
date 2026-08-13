@@ -1,25 +1,34 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Switch } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Switch, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Radius, Shadows } from '@/theme';
-import { Divider } from '@/components/Layout';
-import { SecondaryButton } from '@/components/Button';
+import { Divider, SectionHeader } from '@/components/Layout';
+import { DangerButton } from '@/components/Button';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, isLoggingOut } = useAuth();
   const [pushNotifications, setPushNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (err) {
-      console.warn('Logout error:', err);
-    }
-    router.replace('/login');
+  const handleLogout = () => {
+    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await logout();
+          } catch (err) {
+            console.warn('Logout error:', err);
+          }
+          router.replace('/login');
+        },
+      },
+    ]);
   };
 
   return (
@@ -32,7 +41,6 @@ export default function SettingsScreen() {
           </Text>
         </View>
 
-        {/* Configurations Box */}
         <View style={styles.settingsCard}>
           <View style={styles.settingItem}>
             <View style={styles.settingLabelColumn}>
@@ -63,10 +71,13 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Log Out CTA */}
-        <SecondaryButton
+        <SectionHeader title="Account" />
+        <DangerButton
           title="Log Out"
           onPress={handleLogout}
+          loading={isLoggingOut}
+          leftIcon="logout"
+          variant="tint"
           style={styles.logoutButton}
         />
       </ScrollView>
@@ -82,6 +93,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
+    paddingBottom: Spacing.massive,
   },
   headerSection: {
     marginBottom: Spacing.lg,
@@ -129,8 +141,8 @@ const styles = StyleSheet.create({
     marginVertical: 0,
   },
   logoutButton: {
-    height: 52,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.secondary,
+    width: '100%',
+    marginVertical: 0,
+    marginBottom: Spacing.xl,
   },
 });

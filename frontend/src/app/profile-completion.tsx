@@ -797,7 +797,15 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   headerLogoutBtn: {
-    padding: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radius.round,
+    backgroundColor: '#FFF0F2',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 18, 48, 0.25)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitleText: {
     ...Typography.subHeading,

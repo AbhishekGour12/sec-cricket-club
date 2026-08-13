@@ -9,6 +9,7 @@ import {
   ThemeIcon,
   IconName,
 } from '@/theme';
+import { SectionHeader } from '@/components/Layout';
 import type { PrivacyField, PrivacySettings } from '../../services/authApi';
 
 export interface ContactLinksValue {
@@ -120,10 +121,7 @@ export const ContactLinksEditor: React.FC<ContactLinksEditorProps> = ({
   onPrivacyChange,
 }) => (
   <View style={styles.section}>
-    <View style={styles.sectionHeader}>
-      <ThemeIcon name="link" size={16} color={Colors.secondary} />
-      <Text style={styles.sectionTitle}>Contact &amp; Social Links</Text>
-    </View>
+    <SectionHeader title="Contact & Social Links" style={styles.sectionHeader} />
 
     <Text style={styles.helperText}>
       Choose what other members can see. Hidden details stay private to you and the club admin.
@@ -209,18 +207,8 @@ const styles = StyleSheet.create({
     ...Shadows.sm,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
+    marginTop: 0,
     marginBottom: Spacing.sm,
-  },
-  sectionTitle: {
-    ...Typography.caption,
-    fontWeight: '900',
-    fontSize: 12,
-    letterSpacing: 1,
-    color: Colors.text.outline,
-    textTransform: 'uppercase',
   },
   helperText: {
     ...Typography.caption,

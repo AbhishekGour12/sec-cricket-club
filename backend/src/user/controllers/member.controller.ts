@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import User from '../models/User';
+import BusinessFlyer from '../models/BusinessFlyer';
 import { Op } from 'sequelize';
 import { logger } from '../../utils/logger';
 import { sequelize } from '../../config/database';
@@ -8,28 +9,33 @@ import { serializePublic } from '../serializers/user.serializer';
 export class MemberController {
   /**
    * GET /api/members
-   * Retrieve list of members with search, filter, and pagination options
+   * Retrieve list of members with search, filter, and pagination options.
+   * Only active + approved members; excludes the requesting user.
    */
   public static async getMembers(req: any, res: Response): Promise<void> {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
       const offset = (page - 1) * limit;
-      
+
       const search = req.query.search as string;
       const category = req.query.category as string;
+      const viewerId = req.user?.id ? Number(req.user.id) : null;
 
       const whereClause: any = {
         approval_status: 'approved',
         status: 'active',
       };
 
-      // Filter by category
+      // Never show the signed-in member their own card in the directory.
+      if (viewerId && Number.isInteger(viewerId) && viewerId > 0) {
+        whereClause.id = { [Op.ne]: viewerId };
+      }
+
       if (category) {
         whereClause.business_category = category;
       }
 
-      // Perform broad text search
       if (search) {
         whereClause[Op.or] = [
           { full_name: { [Op.iLike]: `%${search}%` } },
@@ -51,7 +57,7 @@ export class MemberController {
         page,
         limit,
         totalPages: Math.ceil(count / limit),
-        members: rows.map((member) => serializePublic(member, req.user?.id)),
+        members: rows.map((member) => serializePublic(member, viewerId ?? undefined)),
       });
     } catch (error) {
       logger.error('Error fetching members list:', error);
@@ -67,19 +73,16 @@ export class MemberController {
     try {
       const categoriesData = await User.findAll({
         attributes: [
-          [sequelize.fn('DISTINCT', sequelize.col('business_category')), 'business_category']
+          [sequelize.fn('DISTINCT', sequelize.col('business_category')), 'business_category'],
         ],
         where: {
           approval_status: 'approved',
           status: 'active',
           business_category: {
-            [Op.and]: [
-              { [Op.ne]: null as any },
-              { [Op.ne]: '' }
-            ]
-          } as any
+            [Op.and]: [{ [Op.ne]: null as any }, { [Op.ne]: '' }],
+          } as any,
         },
-        raw: true
+        raw: true,
       });
 
       const categories = categoriesData
@@ -89,7 +92,10 @@ export class MemberController {
       res.status(200).json({ categories });
     } catch (error) {
       logger.error('Error fetching distinct categories:', error);
-      res.status(500).json({ error: 'Internal Server Error', message: 'Failed to retrieve business categories' });
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Failed to retrieve business categories',
+      });
     }
   }
 
@@ -98,13 +104,12 @@ export class MemberController {
    * Quick search endpoint (maps search parameters to filter)
    */
   public static async searchMembers(req: any, res: Response): Promise<void> {
-    // Simply proxy to getMembers for unified implementation
     return MemberController.getMembers(req, res);
   }
 
   /**
    * GET /api/members/:id
-   * Retrieve details of a specific member
+   * Retrieve details of a specific member including business flyers
    */
   public static async getMemberById(req: any, res: Response): Promise<void> {
     try {
@@ -116,10 +121,33 @@ export class MemberController {
         return;
       }
 
-      res.status(200).json({ member: serializePublic(member, req.user?.id) });
+      const flyers = await BusinessFlyer.findAll({
+        where: { user_id: member.id },
+        order: [
+          ['display_order', 'ASC'],
+          ['id', 'ASC'],
+        ],
+      });
+
+      res.status(200).json({
+        member: {
+          ...serializePublic(member, req.user?.id),
+          business_flyers: flyers.map((f) => ({
+            id: f.id,
+            user_id: f.user_id,
+            image_url: f.image_url,
+            display_order: f.display_order,
+            created_at: f.created_at,
+            updated_at: f.updated_at,
+          })),
+        },
+      });
     } catch (error) {
       logger.error(`Error fetching member details for ID ${req.params.id}:`, error);
-      res.status(500).json({ error: 'Internal Server Error', message: 'Failed to retrieve member details' });
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Failed to retrieve member details',
+      });
     }
   }
 }
