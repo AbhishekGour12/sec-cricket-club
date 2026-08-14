@@ -9,19 +9,53 @@
       "distribution": "internal",
       "ios": {
         "simulator": false
+      },
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
     },
     "preview": {
       "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
       "ios": {
         "simulator": false
       },
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_API_URL": "https://sec-cricket-club.onrender.com/api",
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "837780082237-n5fr5566aibc80v5ula2ssljqivuf98t.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "837780082237-gmj2oqqtv9ek1a4h1pnrnpfjvr59ktnj.apps.googleusercontent.com",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDr26RHFad25fBtoXDg5fQV2jKOSp1hess",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "sec-cricket-club.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "sec-cricket-club",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "sec-cricket-club.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "837780082237",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:837780082237:web:831a184b6879cbe99f2454",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-EPVDHCCHEC"
+      }
     },
     "production": {
       "autoIncrement": true,
       "ios": {
         "resourceClass": "m-medium"
+      },
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_API_URL": "https://sec-cricket-club.onrender.com/api",
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "837780082237-n5fr5566aibc80v5ula2ssljqivuf98t.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "837780082237-gmj2oqqtv9ek1a4h1pnrnpfjvr59ktnj.apps.googleusercontent.com",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDr26RHFad25fBtoXDg5fQV2jKOSp1hess",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "sec-cricket-club.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "sec-cricket-club",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "sec-cricket-club.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "837780082237",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:837780082237:web:831a184b6879cbe99f2454",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-EPVDHCCHEC"
       }
     }
   },

@@ -13,7 +13,6 @@
       "googleServicesFile": "./GoogleService-Info.plist",
       "supportsTablet": false,
       "buildNumber": "1",
-      "newArchEnabled": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -27,16 +26,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.seccricketclub.app",
-      "googleServicesFile": "./google-services.json",
-      "newArchEnabled": true,
-      "notification": {
-        "icon": "./assets/images/notification-icon.png",
-        "color": "#1A2744"
-      }
-    },
-    "notification": {
-      "icon": "./assets/images/notification-icon.png",
-      "color": "#1A2744"
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
@@ -75,7 +65,8 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.837780082237-gmj2oqqtv9ek1a4h1pnrnpfjvr59ktnj"
         }
-      ]
+      ],
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,
