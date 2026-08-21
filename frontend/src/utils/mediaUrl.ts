@@ -3,6 +3,7 @@ import api from '@/services/api';
 /**
  * Builds an absolute media URL for uploaded images.
  * Always resolves relative upload paths and replaces legacy/localhost/http origins with the current API server URL.
+ * Safely rejects plain non-path text strings (like "fghjk") to prevent broken 404 image requests.
  */
 export const getMediaUrl = (imagePath?: string | null): string | undefined => {
   if (!imagePath) return undefined;
@@ -25,16 +26,14 @@ export const getMediaUrl = (imagePath?: string | null): string | undefined => {
     return serverUrl ? `${serverUrl}${relativeUploadPath}` : relativeUploadPath;
   }
 
-  // If path is relative
-  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-    const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-    return serverUrl ? `${serverUrl}${cleanPath}` : cleanPath;
+  // If full HTTP/HTTPS URL
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    if (trimmed.startsWith('http://') && serverUrl.startsWith('https://')) {
+      return trimmed.replace('http://', 'https://');
+    }
+    return trimmed;
   }
 
-  // If URL uses http:// and serverUrl is https://, upgrade to https:// to prevent mixed content blocking
-  if (trimmed.startsWith('http://') && serverUrl.startsWith('https://')) {
-    return trimmed.replace('http://', 'https://');
-  }
-
-  return trimmed;
+  // Plain text strings (e.g. "fghjk") that are not paths are safely rejected
+  return undefined;
 };

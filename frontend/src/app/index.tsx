@@ -38,16 +38,20 @@ export default function SplashScreen() {
       const delay = Math.max(0, 2500 - elapsed);
 
       setTimeout(() => {
-        if (hasSession) {
-          const user = useAuthStore.getState().user;
-          if (user && !user.is_profile_completed) {
-            router.replace('/profile-completion');
+        fadeAnim.stopAnimation();
+        scaleAnim.stopAnimation();
+        requestAnimationFrame(() => {
+          if (hasSession) {
+            const user = useAuthStore.getState().user;
+            if (user && !user.is_profile_completed) {
+              router.replace('/profile-completion');
+            } else {
+              router.replace('/(tabs)/home');
+            }
           } else {
-            router.replace('/(tabs)/home');
+            router.replace('/login');
           }
-        } else {
-          router.replace('/login');
-        }
+        });
       }, delay);
     };
 

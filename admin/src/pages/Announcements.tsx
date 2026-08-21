@@ -23,6 +23,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { AdminLayout } from '../layouts/AdminLayout';
+import { getAdminMediaUrl } from '../utils/mediaUrl';
 
 const ANNOUNCEMENT_TYPES = [
   'General',
@@ -150,29 +151,7 @@ export const Announcements: React.FC = () => {
     else setActiveTab('all');
   }, [searchParams]);
 
-  const getImageUrl = (path?: string | null) => {
-    if (!path) return '';
-    const trimmedPath = String(path).trim();
-    if (!trimmedPath) return '';
-    const baseURL = apiURL.replace('/api', '');
-
-    const uploadsIndex = trimmedPath.indexOf('/uploads/');
-    if (uploadsIndex !== -1) {
-      const relativeUploadPath = trimmedPath.substring(uploadsIndex);
-      return baseURL ? `${baseURL}${relativeUploadPath}` : relativeUploadPath;
-    }
-
-    if (!trimmedPath.startsWith('http://') && !trimmedPath.startsWith('https://')) {
-      const cleanPath = trimmedPath.startsWith('/') ? trimmedPath : '/' + trimmedPath;
-      return `${baseURL}${cleanPath}`;
-    }
-
-    if (trimmedPath.startsWith('http://') && (window.location.protocol === 'https:' || baseURL.startsWith('https:'))) {
-      return trimmedPath.replace('http://', 'https://');
-    }
-
-    return trimmedPath;
-  };
+  const getImageUrl = (path?: string | null) => getAdminMediaUrl(path, '');
 
   const fetchAnnouncements = useCallback(async () => {
     if (!token) return;
