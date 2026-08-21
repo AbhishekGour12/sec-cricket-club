@@ -32,12 +32,14 @@ interface ProfileCompletionState {
   step: number;
   formData: ProfileCompletionData;
   isSubmitting: boolean;
+  ownerUserId: number | null;
   
   setStep: (step: number) => void;
   nextStep: () => void;
   prevStep: () => void;
   updateFormData: (data: Partial<ProfileCompletionData>) => void;
   setSubmitting: (isSubmitting: boolean) => void;
+  setOwnerUserId: (id: number | null) => void;
   reset: () => void;
 }
 
@@ -66,6 +68,7 @@ export const useProfileStore = create<ProfileCompletionState>()(
       step: 0,
       formData: initialFormData,
       isSubmitting: false,
+      ownerUserId: null,
 
       setStep: (step) => set({ step }),
       nextStep: () => set((state) => ({ step: Math.min(3, state.step + 1) })),
@@ -77,8 +80,9 @@ export const useProfileStore = create<ProfileCompletionState>()(
         })),
         
       setSubmitting: (isSubmitting) => set({ isSubmitting }),
+      setOwnerUserId: (ownerUserId) => set({ ownerUserId }),
       
-      reset: () => set({ step: 0, formData: initialFormData, isSubmitting: false }),
+      reset: () => set({ step: 0, formData: initialFormData, isSubmitting: false, ownerUserId: null }),
     }),
     {
       name: 'profile-completion-storage',

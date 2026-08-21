@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { Op, UniqueConstraintError } from 'sequelize';
 import User from '../models/User';
 import { logger } from '../../utils/logger';
 import { Notification } from '../../admin/models/Notification';
@@ -87,9 +88,6 @@ export class UserController {
         country,
         website,
         is_profile_completed,
-        status,
-        approval_status,
-        rejection_reason,
       } = req.body;
 
       const updateData: any = {};
@@ -128,7 +126,22 @@ export class UserController {
 
       if (full_name !== undefined) updateData.full_name = full_name;
       if (profile_image !== undefined) updateData.profile_image = profile_image;
-      if (membership_number !== undefined) updateData.membership_number = membership_number;
+      if (membership_number !== undefined) {
+        const cleaned = trimOrNull(membership_number);
+        if (cleaned && cleaned !== (user.membership_number || '')) {
+          const existing = await User.findOne({
+            where: { membership_number: cleaned, id: { [Op.ne]: user.id } },
+          });
+          if (existing) {
+            res.status(409).json({
+              error: 'Conflict',
+              message: `Membership number ${cleaned} is already assigned to another member.`,
+            });
+            return;
+          }
+        }
+        updateData.membership_number = cleaned;
+      }
       if (designation !== undefined) updateData.designation = designation;
       if (business_name !== undefined) updateData.business_name = business_name;
       if (business_category !== undefined) updateData.business_category = business_category;
@@ -148,9 +161,6 @@ export class UserController {
       if (country !== undefined) updateData.country = country;
       if (website !== undefined) updateData.website = website;
       if (is_profile_completed !== undefined) updateData.is_profile_completed = is_profile_completed;
-      if (status !== undefined) updateData.status = status;
-      if (approval_status !== undefined) updateData.approval_status = approval_status;
-      if (rejection_reason !== undefined) updateData.rejection_reason = rejection_reason;
 
       const wasProfileCompleted = user.is_profile_completed;
 
@@ -174,6 +184,17 @@ export class UserController {
         user: serializeSelf(user),
       });
     } catch (error) {
+      if (error instanceof UniqueConstraintError) {
+        const field = error.errors?.[0]?.path;
+        const message =
+          field === 'phone'
+            ? 'This mobile number is already registered to another member.'
+            : field === 'membership_number'
+              ? 'This membership number is already assigned to another member.'
+              : 'This profile value is already in use.';
+        res.status(409).json({ error: 'Conflict', message });
+        return;
+      }
       logger.error('Error updating user profile:', error);
       res.status(500).json({ error: 'Internal Server Error', message: 'Failed to update profile' });
     }

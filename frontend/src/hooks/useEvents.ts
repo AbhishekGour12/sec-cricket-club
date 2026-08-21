@@ -48,10 +48,9 @@ export const useEvents = (filters: {
       return response.data;
     },
     enabled: filters.enabled !== false,
-    staleTime: 5 * 1000,
-    refetchOnMount: true,
+    staleTime: 60 * 1000,
+    refetchOnMount: false,
     refetchOnReconnect: true,
-    refetchInterval: 10 * 1000,
   });
 
   return {
@@ -73,9 +72,8 @@ export const useFeaturedEvents = (limit = 10, enabled = true) => {
       return response.data;
     },
     enabled,
-    staleTime: 5 * 1000,
-    refetchOnMount: true,
-    refetchInterval: 10 * 1000,
+    staleTime: 60 * 1000,
+    refetchOnMount: false,
   });
 
   return {

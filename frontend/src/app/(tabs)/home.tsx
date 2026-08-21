@@ -38,11 +38,11 @@ export default function HomeScreen() {
   const isApproved = approvalStatus === 'approved';
   const {
     events: featuredEvents,
-    isLoading: featuredLoading,
+    isPending: featuredLoading,
   } = useFeaturedEventsQuery(10, isApproved);
   const {
     events: upcomingEventsRaw,
-    isLoading: upcomingLoading,
+    isPending: upcomingLoading,
   } = useEventsQuery({ limit: 8, enabled: isApproved });
 
   // Cleaner Home UX: prefer non-featured in compact Upcoming; if all are featured, still show them.
@@ -63,13 +63,13 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    // Seed from the user object immediately so there's no flicker —
-    // then confirm with a real API call in the background.
     if (user?.approval_status) {
       useApprovalStore.getState().setApprovalStatus(user.approval_status);
     }
     fetchApprovalStatus();
-  }, []);
+    // Intentionally once per signed-in member — not on every status change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const handleResubmit = async () => {
     if (!user) return;
@@ -141,7 +141,7 @@ export default function HomeScreen() {
     );
   };
 
-  if (approvalStatus === null) {
+  if (approvalStatus === null && !user?.approval_status) {
     // Status not yet confirmed from server — show a minimal spinner
     // so we never flash a false "pending" screen to an approved user.
     return (
@@ -368,9 +368,9 @@ export default function HomeScreen() {
 
 function HomeAnnouncements() {
   const router = useRouter();
-  const { announcements, isLoading } = useLatestAnnouncements(3, true);
+  const { announcements, isPending } = useLatestAnnouncements(3, true);
 
-  if (isLoading) {
+  if (isPending) {
     return (
       <View style={styles.homeNewsLoading}>
         <ActivityIndicator color={Colors.primary} />

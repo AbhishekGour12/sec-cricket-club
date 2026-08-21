@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -63,7 +63,7 @@ const step1Schema = z.object({
 
 const step2Schema = z.object({
   membership_number: z.string().min(2, 'Membership number must be at least 2 characters'),
-  phone: z.string().regex(/^\+?[0-9]{10,14}$/, 'Phone number must be a valid 10-14 digit number'),
+  phone: z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'),
   city: z.string().min(2, 'City must be at least 2 characters'),
   state: z.string().min(2, 'State must be at least 2 characters'),
   country: z.string().min(2, 'Country must be at least 2 characters'),
@@ -93,6 +93,7 @@ export default function ProfileCompletionScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState<string | null>(null); // tracks active field upload
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const didInitStep = useRef(false);
 
   // Selector modals
   const [designationModal, setDesignationModal] = useState(false);
@@ -104,54 +105,62 @@ export default function ProfileCompletionScreen() {
 
   // Sync user attributes upon entry
   useEffect(() => {
-    if (user) {
-      updateFormData({
-        full_name: formData.full_name || user.full_name || '',
-        profile_image: formData.profile_image || user.profile_image || '',
-        membership_number: formData.membership_number || user.membership_number || '',
-        phone: formData.phone || user.phone || '',
-        designation: formData.designation || user.designation || 'Associate Member',
-        city: formData.city || user.city || '',
-        state: formData.state || user.state || '',
-        country: formData.country || user.country || '',
-        business_name: formData.business_name || user.business_name || '',
-        business_category: formData.business_category || user.business_category || '',
-        business_description: formData.business_description || user.business_description || '',
-        website: formData.website || user.website || '',
-        business_logo: formData.business_logo || user.business_logo || '',
-        visiting_card: formData.visiting_card || user.visiting_card || '',
-        business_images:
-          formData.business_images.length > 0
-            ? formData.business_images
-            : user.business_images || [],
-      });
+    if (!user?.id) return;
 
-      queueMicrotask(() => {
-        const savedCards = (user.visiting_card || '')
-          .split(',')
-          .map((card) => card.trim())
-          .filter(Boolean);
-        setCardFront((current) => current || savedCards[0] || '');
-        setCardBack((current) => current || savedCards[1] || '');
-      });
+    const store = useProfileStore.getState();
+    if (store.ownerUserId && store.ownerUserId !== user.id) {
+      store.reset();
+    }
+    store.setOwnerUserId(user.id);
 
-      // Dynamically determine the initial step based on filled fields
-      const hasStep1 = !!user.full_name && !!user.designation;
-      const hasStep2 = hasStep1 && !!user.membership_number && !!user.phone && !!user.city && !!user.state && !!user.country;
-      const hasStep3 = hasStep2 && !!user.business_name && !!user.business_category;
-      
-      let initialStep = 0;
-      if (hasStep3) initialStep = 3;
-      else if (hasStep2) initialStep = 2;
-      else if (hasStep1) initialStep = 1;
-      
-      // Set the step to the highest validated step on first load
-      if (step === 0) {
-        useProfileStore.getState().setStep(initialStep);
-      }
+    const draft = useProfileStore.getState().formData;
+    updateFormData({
+      full_name: draft.full_name || user.full_name || '',
+      profile_image: draft.profile_image || user.profile_image || '',
+      membership_number: draft.membership_number || user.membership_number || '',
+      phone: draft.phone || user.phone || '',
+      designation: draft.designation || user.designation || 'Associate Member',
+      city: draft.city || user.city || '',
+      state: draft.state || user.state || '',
+      country: draft.country || user.country || '',
+      business_name: draft.business_name || user.business_name || '',
+      business_category: draft.business_category || user.business_category || '',
+      business_description: draft.business_description || user.business_description || '',
+      website: draft.website || user.website || '',
+      business_logo: draft.business_logo || user.business_logo || '',
+      visiting_card: draft.visiting_card || user.visiting_card || '',
+      business_images:
+        draft.business_images.length > 0
+          ? draft.business_images
+          : user.business_images || [],
+    });
+
+    queueMicrotask(() => {
+      const savedCards = (user.visiting_card || '')
+        .split(',')
+        .map((card) => card.trim())
+        .filter(Boolean);
+      setCardFront((current) => current || savedCards[0] || '');
+      setCardBack((current) => current || savedCards[1] || '');
+    });
+
+    if (didInitStep.current) return;
+
+    const hasStep1 = !!user.full_name && !!user.designation;
+    const hasStep2 = hasStep1 && !!user.membership_number && !!user.phone && !!user.city && !!user.state && !!user.country;
+    const hasStep3 = hasStep2 && !!user.business_name && !!user.business_category;
+
+    let initialStep = 0;
+    if (hasStep3) initialStep = 3;
+    else if (hasStep2) initialStep = 2;
+    else if (hasStep1) initialStep = 1;
+
+    didInitStep.current = true;
+    if (useProfileStore.getState().step === 0 && initialStep > 0) {
+      useProfileStore.getState().setStep(initialStep);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user?.id]);
 
   // Request media library and camera access permissions
   const requestPermissions = async () => {
@@ -336,17 +345,27 @@ export default function ProfileCompletionScreen() {
 
     setIsSubmitting(true);
     try {
-      // Put complete payload to backend
       const response = await api.put('/me', {
-        ...formData,
+        profile_image: formData.profile_image,
+        full_name: formData.full_name,
+        membership_number: formData.membership_number.trim(),
+        phone: formData.phone,
+        designation: formData.designation,
+        city: formData.city,
+        state: formData.state,
+        country: formData.country,
+        business_name: formData.business_name,
+        business_category: formData.business_category,
+        business_description: formData.business_description,
+        website: formData.website,
+        business_address: formData.business_address,
+        business_logo: formData.business_logo,
+        visiting_card: formData.visiting_card,
+        business_images: formData.business_images,
         is_profile_completed: true,
-        status: 'pending', // Awaiting Admin verification check
       });
 
-      // Update Zustand user profile state
       storeUpdateUser(response.data.user);
-      
-      // Clear TanStack query cache for currentUser
       await refetchUser();
 
       alert('Registration Completed! Your profile is pending administrator verification.');
@@ -354,7 +373,12 @@ export default function ProfileCompletionScreen() {
       router.replace('/(tabs)/home');
     } catch (err: any) {
       console.error('Submit profile error:', err);
-      alert(err.response?.data?.message || 'Failed to complete registration. Please try again.');
+      const message =
+        err.response?.data?.message ||
+        (err.response?.status === 409
+          ? 'This phone or membership number is already used by another member.'
+          : 'Failed to complete registration. Please try again.');
+      alert(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -438,9 +462,19 @@ export default function ProfileCompletionScreen() {
               label="Phone Number"
               placeholder="e.g. 9876543210"
               value={formData.phone}
-              onChangeText={(val) => updateFormData({ phone: val })}
+              onChangeText={(val) => {
+                const digits = val.replace(/\D/g, '');
+                const normalized =
+                  digits.length === 12 && digits.startsWith('91')
+                    ? digits.slice(2)
+                    : digits.length === 11 && digits.startsWith('0')
+                      ? digits.slice(1)
+                      : digits.slice(0, 10);
+                updateFormData({ phone: normalized });
+              }}
               error={errors.phone}
               keyboardType="phone-pad"
+              maxLength={10}
             />
 
             <Input
@@ -579,7 +613,12 @@ export default function ProfileCompletionScreen() {
                 <Text style={styles.imagesCounter}>{formData.business_images.length}/5</Text>
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.imagesScroll}>
+              <ScrollView
+                horizontal
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.imagesScroll}
+              >
                 {formData.business_images.map((item, idx) => (
                   <View key={idx} style={styles.thumbnailWrapper}>
                     <Image source={{ uri: getImageUrl(item) || undefined }} style={styles.showcaseThumbnail} />
@@ -624,7 +663,7 @@ export default function ProfileCompletionScreen() {
       {/* Light screen — dark status bar icons for iOS readability */}
       <StatusBar style="dark" />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoid}
       >
         {/* Custom Header Row */}
@@ -663,39 +702,42 @@ export default function ProfileCompletionScreen() {
         </View>
 
         {/* Form Body Scroll */}
-        <ScrollView 
+        <ScrollView
+          style={styles.formScroll}
           contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          bounces
         >
           {renderStepContent()}
         </ScrollView>
 
         {/* Footer Navigation Buttons */}
         <View style={styles.footer}>
+          {step > 0 && (
+            <Pressable style={styles.btnSecondaryFull} onPress={prevStep}>
+              <ThemeIcon name="arrowBack" size={18} color={Colors.primary} />
+              <Text style={styles.btnSecondaryText}>PREVIOUS</Text>
+            </Pressable>
+          )}
           {step === 3 ? (
-            <View style={styles.footerFinishRow}>
-              <Pressable style={styles.btnSecondary} onPress={prevStep}>
-                <Text style={styles.btnSecondaryText}>PREVIOUS</Text>
-              </Pressable>
-              <Pressable 
-                style={[styles.btnPrimary, isSubmitting && styles.btnDisabled]} 
-                onPress={handleFinish}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.btnPrimaryText}>COMPLETE REGISTRATION</Text>
-                )}
-              </Pressable>
-            </View>
+            <Pressable
+              style={[styles.btnPrimaryFull, isSubmitting && styles.btnDisabled]}
+              onPress={handleFinish}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.btnPrimaryFullText}>COMPLETE REGISTRATION</Text>
+              )}
+            </Pressable>
           ) : (
-            <View style={styles.footerNextBlock}>
-              <Pressable style={styles.btnPrimaryFull} onPress={handleNext}>
-                <Text style={styles.btnPrimaryFullText}>NEXT</Text>
-                <ThemeIcon name="chevronRight" size={18} color="#FFFFFF" style={styles.nextChevron} />
-              </Pressable>
-            </View>
+            <Pressable style={styles.btnPrimaryFull} onPress={handleNext}>
+              <Text style={styles.btnPrimaryFullText}>NEXT</Text>
+              <ThemeIcon name="chevronRight" size={18} color="#FFFFFF" style={styles.nextChevron} />
+            </Pressable>
           )}
 
           <Pressable style={styles.skipBtn} onPress={handleSkip}>
@@ -780,6 +822,9 @@ const styles = StyleSheet.create({
   keyboardAvoid: {
     flex: 1,
   },
+  formScroll: {
+    flex: 1,
+  },
   header: {
     height: 56,
     flexDirection: 'row',
@@ -848,7 +893,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Spacing.lg,
-    paddingBottom: Spacing.xxxl,
+    paddingBottom: Spacing.massive,
+    flexGrow: 1,
   },
   card: {
     backgroundColor: '#FFFFFF',
@@ -1150,6 +1196,7 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(122, 133, 160, 0.1)',
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
+    gap: Spacing.sm,
   },
   footerNextBlock: {
     alignItems: 'center',
@@ -1162,6 +1209,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
+  },
+  btnSecondaryFull: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    height: 48,
+    borderRadius: Radius.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    gap: 8,
   },
   btnPrimaryFullText: {
     ...Typography.button,
