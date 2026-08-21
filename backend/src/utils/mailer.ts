@@ -47,14 +47,13 @@ export const sendEmail = async (options: MailOptions): Promise<boolean> => {
       return true;
     } catch (error) {
       logger.error(`Failed to send email via SMTP to ${options.to}:`, error);
+      return false;
     }
   }
 
-  // Fallback for development / unconfigured SMTP: log reset instructions
-  logger.warn(`[DEV/SMTP Fallback] Mail dispatch to ${options.to}:`);
+  // Fallback for development when SMTP host is unconfigured
+  logger.warn(`[DEV/Unconfigured SMTP] Mail dispatch attempt to ${options.to}:`);
   logger.warn(`Subject: ${options.subject}`);
-  logger.warn(`Email body content / Reset URL extracted from html.`);
-
   return true;
 };
 

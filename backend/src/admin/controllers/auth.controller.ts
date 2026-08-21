@@ -120,47 +120,52 @@ export class AuthController {
   public static async requestPasswordReset(req: Request, res: Response): Promise<void> {
     try {
       const inputEmail = req.body?.email?.trim()?.toLowerCase();
-      const adminEmail = (process.env.ADMIN_EMAIL || 'sportsentertainmentclub9@gmail.com').trim().toLowerCase();
+      const envAdminEmail = (process.env.ADMIN_EMAIL || 'sportsentertainmentclub9@gmail.com').trim().toLowerCase();
 
-      // If specific email submitted, ensure it matches the target admin email
-      const targetEmail = inputEmail || adminEmail;
-
-      if (targetEmail !== adminEmail) {
-        // Return friendly message without leaking email existence
-        res.status(200).json({
-          message: `If an account exists for ${targetEmail}, a password reset link has been dispatched to it.`,
-        });
-        return;
+      // Find target admin account in database
+      let admin = null;
+      if (inputEmail) {
+        admin = await Admin.findOne({ where: { email: inputEmail } });
       }
 
-      // Find admin account
-      let admin = await Admin.findOne({ where: { email: adminEmail } });
+      if (!admin) {
+        admin = await Admin.findOne({ where: { email: envAdminEmail } });
+      }
 
       if (!admin) {
-        // If admin record does not exist in DB yet, create or find first admin
-        const firstAdmin = await Admin.findOne();
-        if (firstAdmin) {
-          admin = firstAdmin;
-        } else {
-          // Create default admin entry if database is completely empty
-          admin = await Admin.create({
-            email: adminEmail,
-            full_name: 'Administrator',
-          });
-        }
+        admin = await Admin.findOne();
+      }
+
+      if (!admin) {
+        // Create default admin entry if database is completely empty
+        admin = await Admin.create({
+          email: envAdminEmail,
+          full_name: 'Administrator',
+        });
       }
 
       const { generateResetToken } = await import('../../utils/jwt');
       const { sendAdminPasswordResetEmail } = await import('../../utils/mailer');
 
       const resetToken = generateResetToken({ id: admin.id, email: admin.email });
-      const frontendBaseUrl = process.env.ADMIN_FRONTEND_URL || 'http://localhost:5173';
+      const frontendBaseUrl = process.env.ADMIN_FRONTEND_URL || 'http://localhost:3000';
       const resetUrl = `${frontendBaseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
-      await sendAdminPasswordResetEmail(admin.email, resetUrl);
+      // Dispatch password reset email to process.env.ADMIN_EMAIL
+      const emailSent = await sendAdminPasswordResetEmail(envAdminEmail, resetUrl);
+
+      if (!emailSent) {
+        res.status(500).json({
+          error: 'Internal Server Error',
+          message: 'Failed to send password reset email via SMTP. Please check server logs.',
+        });
+        return;
+      }
+
+      logger.info(`Password reset link dispatched to ${envAdminEmail} for admin ID ${admin.id} (${admin.email})`);
 
       res.status(200).json({
-        message: `Password reset link has been successfully dispatched to ${admin.email}`,
+        message: `Password reset link has been successfully dispatched to ${envAdminEmail}`,
       });
     } catch (error) {
       logger.error('Error in requestPasswordReset:', error);

@@ -1,7 +1,9 @@
+import dotenv from 'dotenv';
+dotenv.config(); // Environment configuration loaded at startup
+
 import app from './app';
 import { connectDatabase, sequelize } from './config/database';
 import { logger } from './utils/logger';
-import dotenv from 'dotenv';
 import { User } from './user/models/User'; // Ensure User model is loaded for database sync
 import { BusinessFlyer } from './user/models/BusinessFlyer'; // Ensure BusinessFlyer model is loaded for database sync
 import { Admin } from './admin/models/Admin'; // Ensure Admin model is loaded for database sync
@@ -42,7 +44,6 @@ Sponsor.belongsToMany(Event, {
   as: 'events',
 });
 
-dotenv.config();
 
 const PORT = process.env.PORT || 5000;
 
