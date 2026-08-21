@@ -58,6 +58,8 @@ export default function LoginScreen() {
     if (isSigningIn) return;
     setLoginError(null);
     setIsSigningIn(true);
+    const startMs = Date.now();
+    console.log('[PERF] 🚀 Starting Google Login Flow...');
     // Let the spinner paint before native Google SDK work starts.
     await yieldToPaint();
 
@@ -74,17 +76,26 @@ export default function LoginScreen() {
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       }
 
+      const t1 = Date.now();
       const signInResult = await GoogleSignin.signIn();
+      console.log(`[PERF] 1. Google Sign-In SDK took: ${(Date.now() - t1) / 1000}s`);
+
       const idToken = signInResult.data?.idToken || (signInResult as { idToken?: string }).idToken;
 
       if (!idToken) {
         throw new Error('Google Sign-In failed: No ID Token returned.');
       }
 
+      const t2 = Date.now();
       const credential = GoogleAuthProvider.credential(idToken);
       const firebaseUserCredential = await signInWithCredential(firebaseAuth, credential);
       const firebaseIdToken = await firebaseUserCredential.user.getIdToken();
+      console.log(`[PERF] 2. Firebase Client Auth took: ${(Date.now() - t2) / 1000}s`);
+
+      const t3 = Date.now();
       const userRes = await login(firebaseIdToken);
+      console.log(`[PERF] 3. Backend POST /api/auth/google took: ${(Date.now() - t3) / 1000}s`);
+      console.log(`[PERF] ✅ TOTAL Google Login Flow completed in: ${(Date.now() - startMs) / 1000}s`);
 
       if (userRes && !userRes.is_profile_completed) {
         router.replace('/profile-completion');

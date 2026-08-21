@@ -24,6 +24,8 @@ export class AuthController {
         return;
       }
 
+      const startMs = Date.now();
+
       // 1. Verify token with Firebase Admin (support Mock mode for local testing)
       let uid: string;
       let email: string;
@@ -51,8 +53,10 @@ export class AuthController {
           return;
         }
       } else {
-        logger.info('Verifying Firebase ID Token...');
+        const t1 = Date.now();
+        logger.info('[PERF] Verifying Firebase ID Token...');
         const decodedToken = await auth.verifyIdToken(idToken);
+        logger.info(`[PERF] 1. Firebase verifyIdToken took: ${Date.now() - t1}ms`);
         uid = decodedToken.uid;
         email = decodedToken.email || '';
         name = decodedToken.name || '';
@@ -68,6 +72,7 @@ export class AuthController {
       }
 
       // 2. Check if user already exists
+      const t2 = Date.now();
       let user = await AuthService.findByFirebaseUid(uid);
 
       if (!user) {
@@ -82,13 +87,13 @@ export class AuthController {
             is_profile_completed: false, // Require completing profile assets on mobile
           });
 
-          // Notify admin that an imported member has linked their Google account
-          await Notification.create({
+          // Async non-blocking notification to admin
+          void Notification.create({
             type: 'new_registration',
             title: 'Imported Member Activated',
             message: `${user.full_name || email} (${email}) has linked their Google account and is now active. Profile completion pending.`,
             user_id: user.id,
-          });
+          }).catch((err) => logger.warn('Failed to create notification:', err));
         } else {
           logger.info(`User not found in database. Registering new user for Firebase UID: ${uid}`);
           // Create new user in database
@@ -102,27 +107,30 @@ export class AuthController {
             is_profile_completed: false,
           });
 
-          // Notify admin of a brand-new Google sign-up awaiting approval
-          await Notification.create({
+          // Async non-blocking notification to admin
+          void Notification.create({
             type: 'new_registration',
             title: 'New Member Registration',
             message: `${name || email} (${email}) just signed up via Google and is awaiting admin approval.`,
             user_id: user.id,
-          });
+          }).catch((err) => logger.warn('Failed to create notification:', err));
         }
       } else {
         logger.info(`User found in database. Logging in user ID: ${user.id}`);
         // Optionally update profile image or name if empty or changed
         if (!user.profile_image && picture) {
-          await user.update({ profile_image: picture });
+          void user.update({ profile_image: picture }).catch(() => {});
         }
       }
+      logger.info(`[PERF] 2. User DB lookup/registration took: ${Date.now() - t2}ms`);
 
       // 3. Generate custom backend JWT
       const token = generateToken({
         id: user.id,
         email: user.email ?? email,
       });
+
+      logger.info(`[PERF] ✅ TOTAL Backend loginWithGoogle took: ${Date.now() - startMs}ms`);
 
       // 4. Return user details and JWT
       res.status(200).json({
@@ -185,3 +193,5 @@ export class AuthController {
     }
   }
 }
+
+export default AuthController;

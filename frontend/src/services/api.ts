@@ -36,17 +36,17 @@ if (__DEV__) {
   console.log('[API Base URL]:', baseURL);
 }
 
-// Render / VPS network requests timeout configuration
+// VPS network requests timeout configuration (15s fast failover)
 // eslint-disable-next-line import/no-named-as-default-member
 export const api = axios.create({
   baseURL,
-  timeout: 60000,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 1;
 
 const isRetryableNetworkError = (error: unknown): boolean => {
   const err = error as { code?: string; message?: string; response?: unknown };
