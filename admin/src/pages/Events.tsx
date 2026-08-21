@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -208,6 +208,7 @@ export const Events: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<EventForm>(EMPTY_FORM);
   const [imageUploading, setImageUploading] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [sponsorUploadingIndex, setSponsorUploadingIndex] = useState<number | null>(null);
 
   const [previewItem, setPreviewItem] = useState<ClubEvent | null>(null);
@@ -382,6 +383,8 @@ export const Events: React.FC = () => {
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -1108,19 +1111,31 @@ export const Events: React.FC = () => {
                         </button>
                       </div>
                     ) : (
-                      <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-[#1A2744] bg-white transition-all">
-                        <Upload size={24} className="text-[#7A85A0] mb-2" />
-                        <span className="text-xs text-[#7A85A0] font-semibold">
-                          {imageUploading ? 'Uploading...' : 'Click to upload image'}
-                        </span>
+                      <>
                         <input
+                          ref={imageInputRef}
                           type="file"
                           accept="image/*"
                           onChange={handleImageUpload}
                           disabled={imageUploading}
-                          className="hidden"
+                          style={{ display: 'none' }}
                         />
-                      </label>
+                        <button
+                          type="button"
+                          disabled={imageUploading}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            imageInputRef.current?.click();
+                          }}
+                          className="flex flex-col items-center justify-center h-32 w-full border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-[#1A2744] bg-white transition-all disabled:opacity-50"
+                        >
+                          <Upload size={24} className="text-[#7A85A0] mb-2" />
+                          <span className="text-xs text-[#7A85A0] font-semibold">
+                            {imageUploading ? 'Uploading...' : 'Click to upload image'}
+                          </span>
+                        </button>
+                      </>
                     )}
                   </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -133,6 +133,8 @@ export const Announcements: React.FC = () => {
   const [form, setForm] = useState<AnnouncementForm>(EMPTY_FORM);
   const [coverUploading, setCoverUploading] = useState(false);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   const [previewItem, setPreviewItem] = useState<Announcement | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -279,6 +281,8 @@ export const Announcements: React.FC = () => {
   };
 
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -299,6 +303,8 @@ export const Announcements: React.FC = () => {
   };
 
   const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.type !== 'application/pdf') {
@@ -850,19 +856,31 @@ export const Announcements: React.FC = () => {
                         </button>
                       </div>
                     ) : (
-                      <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-[#1A2744] bg-white transition-all">
-                        <Upload size={24} className="text-[#7A85A0] mb-2" />
-                        <span className="text-xs text-[#7A85A0] font-semibold">
-                          {coverUploading ? 'Uploading...' : 'Click to upload cover'}
-                        </span>
+                      <>
                         <input
+                          ref={coverInputRef}
                           type="file"
                           accept="image/*"
                           onChange={handleCoverUpload}
                           disabled={coverUploading}
-                          className="hidden"
+                          style={{ display: 'none' }}
                         />
-                      </label>
+                        <button
+                          type="button"
+                          disabled={coverUploading}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            coverInputRef.current?.click();
+                          }}
+                          className="flex flex-col items-center justify-center h-32 w-full border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-[#1A2744] bg-white transition-all disabled:opacity-50"
+                        >
+                          <Upload size={24} className="text-[#7A85A0] mb-2" />
+                          <span className="text-xs text-[#7A85A0] font-semibold">
+                            {coverUploading ? 'Uploading...' : 'Click to upload cover'}
+                          </span>
+                        </button>
+                      </>
                     )}
                   </div>
 
@@ -899,19 +917,29 @@ export const Announcements: React.FC = () => {
                           </button>
                         </div>
                       ))}
-                      <label className="flex items-center justify-center gap-2 h-16 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-[#1A2744] bg-white transition-all">
+                      <input
+                        ref={attachmentInputRef}
+                        type="file"
+                        accept="application/pdf"
+                        onChange={handleAttachmentUpload}
+                        disabled={attachmentUploading}
+                        style={{ display: 'none' }}
+                      />
+                      <button
+                        type="button"
+                        disabled={attachmentUploading}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          attachmentInputRef.current?.click();
+                        }}
+                        className="flex items-center justify-center gap-2 h-16 w-full border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-[#1A2744] bg-white transition-all disabled:opacity-50"
+                      >
                         <Upload size={16} className="text-[#7A85A0]" />
                         <span className="text-xs text-[#7A85A0] font-semibold">
                           {attachmentUploading ? 'Uploading...' : 'Add PDF'}
                         </span>
-                        <input
-                          type="file"
-                          accept="application/pdf"
-                          onChange={handleAttachmentUpload}
-                          disabled={attachmentUploading}
-                          className="hidden"
-                        />
-                      </label>
+                      </button>
                     </div>
                   </div>
 
