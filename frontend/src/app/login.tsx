@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
-  InteractionManager,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +17,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { GoogleAuthProvider, OAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth as firebaseAuth } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { UserProfile } from '../services/authApi';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LogoBadge } from '@/components/SecLogo';
 import { DotPatternBackground } from '@/components/DotPatternBackground';
@@ -39,75 +39,153 @@ GoogleSignin.configure({
   webClientId: WEB_CLIENT_ID,
   iosClientId: IOS_CLIENT_ID,
   offlineAccess: false,
+  forceCodeForRefreshToken: false,
 });
 
 function yieldToPaint() {
   return new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      setTimeout(resolve, 0);
-    });
+    requestAnimationFrame(() => setTimeout(resolve, 0));
   });
 }
+
+function extractGoogleIdToken(signInResult: {
+  data?: { idToken?: string | null } | null;
+  idToken?: string;
+}): string | null {
+  return signInResult.data?.idToken || signInResult.idToken || null;
+}
+
+let playServicesReady = false;
+
+async function warmGoogleSignIn(): Promise<void> {
+  if (Platform.OS !== 'android' || playServicesReady) return;
+  try {
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: false });
+    playServicesReady = true;
+  } catch {
+    // Play Services unavailable — signIn will surface the error.
+  }
+}
+
+const SILENT_SIGN_IN_MS = 1500;
+
+async function trySilentGoogleToken(): Promise<string | null> {
+  try {
+    const silent = await Promise.race([
+      GoogleSignin.signInSilently(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('silent-sign-in-timeout')), SILENT_SIGN_IN_MS),
+      ),
+    ]);
+    if (silent.type === 'success') {
+      return extractGoogleIdToken(silent);
+    }
+  } catch {
+    // Silent sign-in unavailable — use interactive picker.
+  }
+  return null;
+}
+
+/** Fast path: silent cached session, otherwise one interactive Google sign-in. */
+async function getGoogleIdToken(): Promise<string> {
+  const silentToken = await trySilentGoogleToken();
+  if (silentToken) return silentToken;
+
+  const signInResult = await GoogleSignin.signIn();
+  if (signInResult.type === 'cancelled') {
+    throw new Error('SIGN_IN_CANCELLED');
+  }
+  const idToken = extractGoogleIdToken(signInResult);
+  if (!idToken) {
+    throw new Error('Google Sign-In failed: No ID Token returned.');
+  }
+  return idToken;
+}
+
+function isRejectedAuthError(err: unknown): boolean {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  return status === 401 || status === 400;
+}
+
+async function authenticateWithBackend(
+  login: (token: string) => Promise<UserProfile>,
+  idToken: string,
+): Promise<UserProfile> {
+  try {
+    return await login(idToken);
+  } catch (directErr) {
+    // Only retry with Firebase when backend explicitly rejects the Google token.
+    // Never fall back on timeout/network errors — that was adding ~15+ extra seconds.
+    if (!isRejectedAuthError(directErr)) {
+      throw directErr;
+    }
+
+    console.log('[PERF] Backend rejected Google token, retrying with Firebase token');
+    const credential = GoogleAuthProvider.credential(idToken);
+    const firebaseUserCredential = await signInWithCredential(firebaseAuth, credential);
+    const firebaseIdToken = await firebaseUserCredential.user.getIdToken();
+    return login(firebaseIdToken);
+  }
+}
+
+const SUCCESS_VISIBLE_MS = 700;
 
 export default function LoginScreen() {
   const router = useRouter();
   const { login, error } = useAuth();
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState('Signing in...');
 
-  const handleGoogleLogin = async () => {
-    if (isSigningIn) return;
-    setLoginError(null);
-    setIsSigningIn(true);
-    const startMs = Date.now();
-    console.log('[PERF] 🚀 Starting Fast Google Login Flow...');
-    // Let the spinner paint before native Google SDK work starts.
-    await yieldToPaint();
+  useEffect(() => {
+    void warmGoogleSignIn();
+  }, []);
 
-    try {
-      // Play Services check is Android-only; calling it on iOS can throw.
-      if (Platform.OS === 'android') {
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: false });
-      }
-
-      const t1 = Date.now();
-      const signInResult = await GoogleSignin.signIn();
-      console.log(`[PERF] 1. Google Sign-In SDK took: ${(Date.now() - t1) / 1000}s`);
-
-      const idToken = signInResult.data?.idToken || (signInResult as { idToken?: string }).idToken;
-
-      if (!idToken) {
-        throw new Error('Google Sign-In failed: No ID Token returned.');
-      }
-
-      let userRes;
-      const t2 = Date.now();
-      try {
-        // Fast Path: Authenticate directly with backend using Google OpenID ID Token
-        userRes = await login(idToken);
-        console.log(`[PERF] 2. Direct Backend Auth took: ${(Date.now() - t2) / 1000}s`);
-      } catch (directErr) {
-        console.log('[PERF] Direct Google ID Token backend verification failed, attempting Firebase Client Auth fallback:', directErr);
-        const credential = GoogleAuthProvider.credential(idToken);
-        const firebaseUserCredential = await signInWithCredential(firebaseAuth, credential);
-        const firebaseIdToken = await firebaseUserCredential.user.getIdToken();
-        console.log(`[PERF] 2b. Firebase Client Auth fallback took: ${(Date.now() - t2) / 1000}s`);
-        userRes = await login(firebaseIdToken);
-      }
-
-      console.log(`[PERF] ✅ TOTAL Google Login Flow completed in: ${(Date.now() - startMs) / 1000}s`);
-
-      setIsSigningIn(false);
-      await yieldToPaint();
-      await new Promise<void>((resolve) => {
-        InteractionManager.runAfterInteractions(() => resolve());
-      });
-
+  const navigateAfterLogin = useCallback(
+    (userRes: UserProfile) => {
       if (userRes && !userRes.is_profile_completed) {
         router.replace('/profile-completion');
       } else {
         router.replace('/(tabs)/home');
       }
+    },
+    [router],
+  );
+
+  const finishLogin = useCallback(
+    async (userRes: UserProfile) => {
+      const welcomeName = userRes.full_name?.trim() || userRes.email?.split('@')[0] || 'Member';
+      setLoginSuccess(`Welcome, ${welcomeName}!`);
+      setStatusMessage('Login successful');
+      setIsSigningIn(false);
+      await new Promise((resolve) => setTimeout(resolve, SUCCESS_VISIBLE_MS));
+      navigateAfterLogin(userRes);
+    },
+    [navigateAfterLogin],
+  );
+
+  const handleGoogleLogin = async () => {
+    if (isSigningIn || loginSuccess) return;
+    setLoginError(null);
+    setLoginSuccess(null);
+    setIsSigningIn(true);
+    setStatusMessage('Connecting to Google...');
+    const startMs = Date.now();
+    await yieldToPaint();
+
+    try {
+      const t1 = Date.now();
+      const idToken = await getGoogleIdToken();
+      console.log(`[PERF] 1. Google Sign-In took: ${(Date.now() - t1) / 1000}s`);
+
+      setStatusMessage('Verifying account...');
+      const t2 = Date.now();
+      const userRes = await authenticateWithBackend(login, idToken);
+      console.log(`[PERF] 2. Backend auth took: ${(Date.now() - t2) / 1000}s`);
+      console.log(`[PERF] ✅ TOTAL Google Login Flow: ${(Date.now() - startMs) / 1000}s`);
+
+      await finishLogin(userRes);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to authenticate with Google.';
       console.error('Google Auth Login failed:', err);
@@ -118,13 +196,17 @@ export default function LoginScreen() {
         setLoginError(message || 'Failed to authenticate with Google. Please try again.');
       }
       setIsSigningIn(false);
+      setLoginSuccess(null);
+      setStatusMessage('Signing in...');
     }
   };
 
   const handleAppleLogin = async () => {
-    if (isSigningIn) return;
+    if (isSigningIn || loginSuccess) return;
     setLoginError(null);
+    setLoginSuccess(null);
     setIsSigningIn(true);
+    setStatusMessage('Connecting to Apple...');
     await yieldToPaint();
 
     try {
@@ -139,6 +221,7 @@ export default function LoginScreen() {
         throw new Error('Apple Sign-In failed: No identity token returned.');
       }
 
+      setStatusMessage('Verifying account...');
       const provider = new OAuthProvider('apple.com');
       const credential = provider.credential({
         idToken: credentialResult.identityToken,
@@ -148,17 +231,7 @@ export default function LoginScreen() {
       const firebaseIdToken = await firebaseUserCredential.user.getIdToken();
       const userRes = await login(firebaseIdToken);
 
-      setIsSigningIn(false);
-      await yieldToPaint();
-      await new Promise<void>((resolve) => {
-        InteractionManager.runAfterInteractions(() => resolve());
-      });
-
-      if (userRes && !userRes.is_profile_completed) {
-        router.replace('/profile-completion');
-      } else {
-        router.replace('/(tabs)/home');
-      }
+      await finishLogin(userRes);
     } catch (err: unknown) {
       if ((err as { code?: string })?.code === 'ERR_REQUEST_CANCELED') {
         setLoginError('Apple Sign-In was cancelled.');
@@ -168,6 +241,8 @@ export default function LoginScreen() {
         setLoginError(message || 'Failed to authenticate with Apple. Please try again.');
       }
       setIsSigningIn(false);
+      setLoginSuccess(null);
+      setStatusMessage('Signing in...');
     }
   };
 
@@ -304,10 +379,22 @@ export default function LoginScreen() {
         </View>
       </SafeAreaView>
 
-      {isSigningIn ? (
+      {isSigningIn || loginSuccess ? (
         <View style={styles.loadingOverlay} pointerEvents="auto">
-          <ActivityIndicator size="large" color="#FFFFFF" />
-          <Text style={styles.loadingOverlayText}>Signing in...</Text>
+          {loginSuccess ? (
+            <>
+              <View style={styles.successIconCircle}>
+                <FontAwesome name="check" size={32} color="#FFFFFF" />
+              </View>
+              <Text style={styles.successTitle}>Login Successful</Text>
+              <Text style={styles.successSubtitle}>{loginSuccess}</Text>
+            </>
+          ) : (
+            <>
+              <ActivityIndicator size="large" color="#FFFFFF" />
+              <Text style={styles.loadingOverlayText}>{statusMessage}</Text>
+            </>
+          )}
         </View>
       ) : null}
     </View>
@@ -530,5 +617,29 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     marginTop: Spacing.md,
     textTransform: 'uppercase',
+  },
+  successIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#2E7D32',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  successTitle: {
+    fontFamily: Typography.heading.fontFamily,
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 22,
+    letterSpacing: 0.5,
+  },
+  successSubtitle: {
+    fontFamily: Typography.body.fontFamily,
+    color: 'rgba(255, 255, 255, 0.88)',
+    fontSize: 14,
+    marginTop: Spacing.sm,
+    textAlign: 'center',
+    paddingHorizontal: Spacing.xl,
   },
 });
