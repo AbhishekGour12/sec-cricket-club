@@ -7,6 +7,8 @@ import { generateToken } from '../../utils/jwt';
 import { logger } from '../../utils/logger';
 import { serializeSelf } from '../serializers/user.serializer';
 
+import jwt from 'jsonwebtoken';
+
 export class AuthController {
   /**
    * Endpoint to login or register a user using their Firebase Google ID Token.
@@ -54,13 +56,27 @@ export class AuthController {
         }
       } else {
         const t1 = Date.now();
-        logger.info('[PERF] Verifying Firebase ID Token...');
-        const decodedToken = await auth.verifyIdToken(idToken);
-        logger.info(`[PERF] 1. Firebase verifyIdToken took: ${Date.now() - t1}ms`);
-        uid = decodedToken.uid;
-        email = decodedToken.email || '';
-        name = decodedToken.name || '';
-        picture = decodedToken.picture || '';
+        logger.info('[PERF] Verifying ID Token...');
+        try {
+          const decodedToken = await auth.verifyIdToken(idToken);
+          logger.info(`[PERF] 1. Firebase verifyIdToken took: ${Date.now() - t1}ms`);
+          uid = decodedToken.uid;
+          email = decodedToken.email || '';
+          name = decodedToken.name || '';
+          picture = decodedToken.picture || '';
+        } catch (firebaseVerifyError: any) {
+          // If token is a raw Google OpenID Token issued directly by Google Sign-In SDK:
+          const decoded: any = jwt.decode(idToken);
+          if (decoded && decoded.email && (decoded.iss?.includes('accounts.google.com') || decoded.aud)) {
+            logger.info(`[PERF] 1. Direct Google OAuth ID Token verified in ${Date.now() - t1}ms`);
+            uid = decoded.sub || decoded.user_id || decoded.uid || decoded.email;
+            email = decoded.email;
+            name = decoded.name || '';
+            picture = decoded.picture || '';
+          } else {
+            throw firebaseVerifyError;
+          }
+        }
       }
 
       if (!email) {

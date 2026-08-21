@@ -32,8 +32,21 @@ cd "$ROOT_DIR/admin"
 npm install
 VITE_API_URL=https://sec-api.duckdns.org/api npm run build
 
-# Step 4: Reload Nginx
-echo "🌐 [5/5] Reloading Nginx Web Server..."
+# Step 4: Ensure Nginx routes /uploads to Node.js backend
+echo "🌐 [5/6] Checking Nginx configuration for /uploads..."
+NGINX_CONF="/etc/nginx/sites-available/sec-api.duckdns.org"
+if [ ! -f "$NGINX_CONF" ]; then
+    NGINX_CONF="/etc/nginx/sites-available/default"
+fi
+if [ -f "$NGINX_CONF" ]; then
+    if ! grep -q "location /uploads" "$NGINX_CONF"; then
+        echo "🔧 Adding /uploads proxy rule to Nginx..."
+        sudo sed -i '/location \/ {/i \    location /uploads/ {\n        proxy_pass http://127.0.0.1:5001/uploads/;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n    }\n' "$NGINX_CONF" || true
+    fi
+fi
+
+echo "🌐 [6/6] Testing & Reloading Nginx Web Server..."
+sudo nginx -t || true
 sudo systemctl reload nginx || sudo systemctl restart nginx
 
 echo "================================================="
