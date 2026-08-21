@@ -45,6 +45,25 @@ Sponsor.belongsToMany(Event, {
 });
 
 
+import fs from 'fs';
+import path from 'path';
+
+// Ensure upload directories exist on server startup
+const uploadDirs = [
+  path.join(__dirname, '../uploads'),
+  path.join(__dirname, '../uploads/announcements'),
+  path.join(__dirname, '../uploads/events'),
+  path.join(__dirname, '../uploads/members'),
+  path.join(__dirname, '../uploads/visiting_cards'),
+  path.join(__dirname, '../uploads/sponsors'),
+  path.join(__dirname, '../uploads/business_flyers'),
+];
+for (const dir of uploadDirs) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {

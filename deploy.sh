@@ -41,7 +41,7 @@ fi
 if [ -f "$NGINX_CONF" ]; then
     if ! grep -q "location /uploads" "$NGINX_CONF"; then
         echo "🔧 Adding /uploads proxy rule to Nginx..."
-        sudo sed -i '/location \/ {/i \    location /uploads/ {\n        proxy_pass http://127.0.0.1:5001/uploads/;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n    }\n' "$NGINX_CONF" || true
+        sudo sed -i '/location \/ {/i \    location /uploads {\n        proxy_pass http://127.0.0.1:5001/uploads;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n    }\n' "$NGINX_CONF" || true
     fi
 fi
 
