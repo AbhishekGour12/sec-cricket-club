@@ -299,12 +299,13 @@ export default function LoginScreen() {
         </View>
       </SafeAreaView>
 
-      {isSigningIn && (
-        <View style={styles.loadingOverlay} pointerEvents="auto">
-          <ActivityIndicator size="large" color="#FFFFFF" />
-          <Text style={styles.loadingOverlayText}>Signing in...</Text>
-        </View>
-      )}
+      <View
+        style={[styles.loadingOverlay, !isSigningIn && { display: 'none' }]}
+        pointerEvents={isSigningIn ? 'auto' : 'none'}
+      >
+        <ActivityIndicator size="large" color="#FFFFFF" />
+        <Text style={styles.loadingOverlayText}>Signing in...</Text>
+      </View>
     </View>
   );
 }

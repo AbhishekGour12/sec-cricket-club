@@ -1089,12 +1089,15 @@ export const Events: React.FC = () => {
                       <ImageIcon size={12} />
                       Event Image
                     </label>
-                    {form.event_image ? (
+                    {form.event_image && getImageUrl(form.event_image) ? (
                       <div className="relative rounded-xl overflow-hidden border border-slate-200">
                         <img
                           src={getImageUrl(form.event_image)}
                           alt="Event preview"
                           className="w-full h-32 object-cover"
+                          onError={() => {
+                            setForm((prev) => ({ ...prev, event_image: '' }));
+                          }}
                         />
                         <button
                           type="button"

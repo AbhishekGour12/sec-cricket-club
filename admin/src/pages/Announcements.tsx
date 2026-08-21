@@ -831,12 +831,15 @@ export const Announcements: React.FC = () => {
                       <ImageIcon size={12} />
                       Cover Image
                     </label>
-                    {form.cover_image ? (
+                    {form.cover_image && getImageUrl(form.cover_image) ? (
                       <div className="relative rounded-xl overflow-hidden border border-slate-200">
                         <img
                           src={getImageUrl(form.cover_image)}
                           alt="Cover preview"
                           className="w-full h-32 object-cover"
+                          onError={() => {
+                            setForm((prev) => ({ ...prev, cover_image: '' }));
+                          }}
                         />
                         <button
                           type="button"
