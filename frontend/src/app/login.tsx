@@ -62,6 +62,13 @@ export default function LoginScreen() {
     await yieldToPaint();
 
     try {
+      // Clear any prior cached Google session so account selector dialog pops up
+      try {
+        await GoogleSignin.signOut();
+      } catch {
+        /* ignore if not previously signed in */
+      }
+
       // Play Services check is Android-only; calling it on iOS can throw.
       if (Platform.OS === 'android') {
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -144,11 +151,11 @@ export default function LoginScreen() {
   };
 
   const openPrivacyPolicy = () => {
-    WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL);
+    router.push('/privacy' as any);
   };
 
   const openTermsOfService = () => {
-    WebBrowser.openBrowserAsync(TERMS_URL);
+    router.push('/terms' as any);
   };
 
   const handleDevBypass = async () => {
@@ -251,7 +258,6 @@ export default function LoginScreen() {
                     <>
                       <FontAwesome name="google" size={18} color="#FFFFFF" style={styles.googleIcon} />
                       <Text style={styles.googleButtonText}>CONTINUE WITH GOOGLE</Text>
-                      <Text style={styles.chevron}>{'>'}</Text>
                     </>
                   )}
                 </LinearGradient>
@@ -445,7 +451,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 14,
     letterSpacing: 1.2,
-    flex: 1,
     textAlign: 'center',
   },
   chevron: {
