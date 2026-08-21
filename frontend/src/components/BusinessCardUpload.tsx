@@ -15,8 +15,10 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Spacing, Radius } from '@/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - Spacing.xl * 2 - Spacing.md) / 2;
-const CARD_HEIGHT = CARD_WIDTH * 0.6; // Standard business card aspect ratio ~1.75:1
+// Full-width card in a typical form column (~screen minus horizontal padding).
+const CARD_WIDTH = SCREEN_WIDTH - Spacing.lg * 2 - Spacing.xl * 2;
+const CARD_ASPECT = 1.75; // standard business card width : height
+const CARD_HEIGHT = Math.round(CARD_WIDTH / CARD_ASPECT);
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -106,8 +108,8 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
         Upload a clear photo of both sides of your business card.
       </Text>
 
-      {/* ── Card slots grid ── */}
-      <View style={styles.cardsGrid}>
+      {/* ── Card slots — stacked so the full card is visible ── */}
+      <View style={styles.cardsStack}>
         <CardSlot
           side="front"
           label="Front Side"
@@ -321,7 +323,7 @@ const CardSlot: React.FC<CardSlotProps> = ({
             <Image
               source={{ uri: imageUrl }}
               style={styles.cardSlotImage}
-              resizeMode="cover"
+              resizeMode="contain"
             />
             {/* Edit badge overlay */}
             <View style={styles.cardSlotEditBadge}>
@@ -394,10 +396,9 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
-  // Cards grid
-  cardsGrid: {
-    flexDirection: 'row',
-    gap: Spacing.md,
+  // Cards stack (full width, one per row)
+  cardsStack: {
+    gap: Spacing.lg,
   },
 
   // Error
@@ -410,7 +411,7 @@ const styles = StyleSheet.create({
 
   // ── Card Slot ──
   cardSlotWrapper: {
-    flex: 1,
+    width: '100%',
   },
   cardSlotLabelRow: {
     flexDirection: 'row',
@@ -439,7 +440,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.text.outline,
     borderStyle: 'dashed',
     overflow: 'hidden',
-    backgroundColor: '#F8F9FC',
+    backgroundColor: '#EEF1F7',
   },
   cardSlotFilled: {
     borderStyle: 'solid',

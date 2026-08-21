@@ -1,13 +1,13 @@
 import React from 'react';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import { useRealtimeStream } from '../hooks/useRealtimeStream';
 import { useAnnouncementRealtime } from '../hooks/useAnnouncementRealtime';
 import { useEventRealtime } from '../hooks/useEventRealtime';
 import { useAuthStore } from '../store/authStore';
 import { useApprovalStore } from '../store/approvalStore';
 
 /**
- * Registers push + foreground sync for approved members.
- * Sync runs once on open / resume; push covers live updates while open.
+ * Registers push + SSE realtime + polling fallback for approved members.
  */
 export function PushNotificationBootstrap() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -15,6 +15,7 @@ export function PushNotificationBootstrap() {
   const enabled = isAuthenticated && approvalStatus === 'approved';
 
   usePushNotifications(enabled);
+  useRealtimeStream(enabled);
   useAnnouncementRealtime(enabled);
   useEventRealtime(enabled);
 

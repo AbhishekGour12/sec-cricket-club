@@ -1,6 +1,7 @@
 import { ApprovalRepository } from '../repositories/approval.repository';
 import User from '../models/User';
 import { sendPushNotification } from '../../services/notification.service';
+import { emitContentUpdate } from '../../utils/realtime-publish';
 
 export class ApprovalService {
   public static async getPendingMembers(): Promise<User[]> {
@@ -41,6 +42,11 @@ export class ApprovalService {
         // Log notification failure but don't crash
         console.error('Failed to send approval push notification:', err);
       }
+      emitContentUpdate('members', 'refresh', {
+        id: user.id,
+        title: user.full_name || user.email || undefined,
+        message: 'Member directory updated',
+      });
     }
 
     return user;

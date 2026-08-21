@@ -683,8 +683,9 @@ export const Events: React.FC = () => {
             <button
               key={key}
               onClick={() => handleTabChange(key)}
-              className={`pb-4 text-sm font-bold transition-all relative ${activeTab === key ? 'text-[#C41230]' : 'text-[#7A85A0] hover:text-[#0E1525]'
-                }`}
+              className={`pb-4 text-sm font-bold transition-all relative ${
+                activeTab === key ? 'text-[#C41230]' : 'text-[#7A85A0] hover:text-[#0E1525]'
+              }`}
             >
               {label}
               {activeTab === key && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#C41230]" />}
@@ -1065,10 +1066,11 @@ export const Events: React.FC = () => {
                     <div className="flex justify-between items-center">
                       <label className="text-xs text-[#3A4260] font-semibold">Description</label>
                       <span
-                        className={`text-[10px] font-bold ${form.description.length > DESCRIPTION_MAX
-                          ? 'text-[#C41230]'
-                          : 'text-[#7A85A0]'
-                          }`}
+                        className={`text-[10px] font-bold ${
+                          form.description.length > DESCRIPTION_MAX
+                            ? 'text-[#C41230]'
+                            : 'text-[#7A85A0]'
+                        }`}
                       >
                         {form.description.length}/{DESCRIPTION_MAX}
                       </span>

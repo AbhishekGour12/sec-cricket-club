@@ -5,6 +5,7 @@ import { verifyJwt } from '../user/middlewares/verifyJwt';
 import { upload, uploadBusinessFlyer, uploadAnnouncement, uploadEvent, uploadSponsor } from '../middlewares/upload';
 import EventController from '../admin/controllers/event.controller';
 import UserController from '../user/controllers/user.controller';
+import RealtimeController from '../user/controllers/realtime.controller';
 import MemberController from '../user/controllers/member.controller';
 import UploadController from '../user/controllers/upload.controller';
 import BusinessFlyerController from '../user/controllers/business-flyer.controller';
@@ -45,6 +46,7 @@ router.get('/me', verifyJwt as any, UserController.getMe);
 router.put('/me', verifyJwt as any, UserController.updateMe);
 router.post('/me/fcm-token', verifyJwt as any, UserController.saveFcmToken);
 router.post('/me/request-approval', verifyJwt as any, UserController.requestApproval);
+router.get('/realtime/stream', RealtimeController.stream as any);
 
 // Saved member network (bookmarks)
 router.get('/me/bookmarks', verifyJwt as any, UserController.getBookmarks);

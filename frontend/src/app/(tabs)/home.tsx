@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Colors, Typography, Spacing, Radius, Shadows, ThemeIcon } from '@/theme';
 import { Avatar } from '@/components/Avatar';
 import { SectionHeader } from '@/components/Layout';
@@ -22,9 +23,11 @@ import { useFeaturedEventsQuery, useEventsQuery } from '../../hooks/useEvents';
 import { useEventStore } from '../../store/eventStore';
 import { FeaturedEventsCarousel } from '@/components/Events/FeaturedEventsCarousel';
 import { UpcomingEventsPreview } from '@/components/Events/UpcomingEventsPreview';
+import { refreshPublishedContent } from '../../utils/refreshContent';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { approvalStatus, rejectedReason, fetchApprovalStatus } = useApprovalStore();
   const profileDraft = useProfileStore((state) => state.formData);
@@ -70,6 +73,13 @@ export default function HomeScreen() {
     // Intentionally once per signed-in member — not on every status change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isApproved) return;
+      void refreshPublishedContent(queryClient);
+    }, [isApproved, queryClient]),
+  );
 
   const handleResubmit = async () => {
     if (!user) return;

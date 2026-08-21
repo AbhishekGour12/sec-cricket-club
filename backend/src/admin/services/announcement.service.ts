@@ -4,6 +4,7 @@ import AnnouncementRepository, {
 import Announcement from '../models/Announcement';
 import { broadcastToApprovedMembers } from '../../services/notification.service';
 import { logger } from '../../utils/logger';
+import { emitContentUpdate } from '../../utils/realtime-publish';
 
 export class AnnouncementService {
   public static async listAdmin(filters: AnnouncementListFilters) {
@@ -88,6 +89,11 @@ export class AnnouncementService {
           action,
           announcementId: String(announcement.id),
         },
+      });
+      emitContentUpdate('announcement', action, {
+        id: announcement.id,
+        title: announcement.title,
+        message: title,
       });
     } catch (err) {
       logger.error('[Announcement] Failed to broadcast push:', err);

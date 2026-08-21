@@ -57,7 +57,10 @@ export const useMembers = (filters: {
       });
       return response.data;
     },
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const categoriesQuery = useQuery({

@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/authStore';
 import { useAnnouncementStore } from '../store/announcementStore';
 import { useEventStore } from '../store/eventStore';
 import { useQueryClient } from '@tanstack/react-query';
+import { refreshPublishedContent } from '../utils/refreshContent';
 
 try {
   Notifications.setNotificationHandler({
@@ -123,8 +124,7 @@ export function usePushNotifications(enabled: boolean) {
               message: String(title),
             });
           }
-          queryClient.invalidateQueries({ queryKey: ['announcements'] });
-          queryClient.invalidateQueries({ queryKey: ['announcement'] });
+          void refreshPublishedContent(queryClient);
           if (unpublished && id) {
             queryClient.removeQueries({ queryKey: ['announcement', id] });
           }
@@ -143,8 +143,7 @@ export function usePushNotifications(enabled: boolean) {
               message: String(title),
             });
           }
-          queryClient.invalidateQueries({ queryKey: ['events'] });
-          queryClient.invalidateQueries({ queryKey: ['event'] });
+          void refreshPublishedContent(queryClient);
           if (unpublished && id) {
             queryClient.removeQueries({ queryKey: ['event', id] });
           }
@@ -155,13 +154,13 @@ export function usePushNotifications(enabled: boolean) {
         const data = response.notification.request.content.data as
           | Record<string, string>
           | undefined;
-        if (data?.type === 'event') {
-          queryClient.invalidateQueries({ queryKey: ['events'] });
-          queryClient.invalidateQueries({ queryKey: ['event'] });
+        void refreshPublishedContent(queryClient);
+        if (data?.type === 'event' && data.eventId) {
           return;
         }
-        queryClient.invalidateQueries({ queryKey: ['announcements'] });
-        queryClient.invalidateQueries({ queryKey: ['announcement'] });
+        if (data?.type === 'announcement' && data.announcementId) {
+          return;
+        }
       });
     };
 

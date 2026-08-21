@@ -94,6 +94,7 @@ export default function ProfileCompletionScreen() {
   const [isUploading, setIsUploading] = useState<string | null>(null); // tracks active field upload
   const [isSubmitting, setIsSubmitting] = useState(false);
   const didInitStep = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
 
   // Selector modals
   const [designationModal, setDesignationModal] = useState(false);
@@ -233,6 +234,8 @@ export default function ProfileCompletionScreen() {
 
     if (type === 'profile-image' || type === 'business-logo') {
       pickerOptions.aspect = [1, 1];
+    } else if (type === 'visiting-card-front' || type === 'visiting-card-back') {
+      pickerOptions.aspect = [7, 4];
     } else {
       pickerOptions.aspect = [4, 3];
     }
@@ -262,6 +265,7 @@ export default function ProfileCompletionScreen() {
           setCardFront(uploadRes.url);
           const completeCard = cardBack ? `${uploadRes.url},${cardBack}` : uploadRes.url;
           updateFormData({ visiting_card: completeCard });
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
         }
       } else if (type === 'visiting-card-back') {
         const uploadRes = await handleUploadImage(pickedUri, 'visiting-card-back', useCamera);
@@ -269,6 +273,7 @@ export default function ProfileCompletionScreen() {
           setCardBack(uploadRes.url);
           const completeCard = cardFront ? `${cardFront},${uploadRes.url}` : uploadRes.url;
           updateFormData({ visiting_card: completeCard });
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
         }
       } else if (type === 'business-images') {
         if (formData.business_images.length >= 5) {
@@ -659,7 +664,7 @@ export default function ProfileCompletionScreen() {
   const progressLabel = step >= 2 ? 'BUSINESS DETAILS' : 'PROFILE STRENGTH';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       {/* Light screen — dark status bar icons for iOS readability */}
       <StatusBar style="dark" />
       <KeyboardAvoidingView
@@ -703,6 +708,7 @@ export default function ProfileCompletionScreen() {
 
         {/* Form Body Scroll */}
         <ScrollView
+          ref={scrollRef}
           style={styles.formScroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator
@@ -893,7 +899,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Spacing.lg,
-    paddingBottom: Spacing.massive,
+    paddingBottom: 120,
     flexGrow: 1,
   },
   card: {

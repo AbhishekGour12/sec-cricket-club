@@ -181,7 +181,7 @@ export const Members: React.FC = () => {
   const [importMode, setImportMode] = useState<'create_only' | 'create_update'>('create_only');
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
-  const apiURL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api';
+  const apiURL = import.meta.env.VITE_API_URL || 'https://sec-api.duckdns.org/api';
   const token = localStorage.getItem('admin_jwt');
 
   // Synchronize Tab with URL query parameter

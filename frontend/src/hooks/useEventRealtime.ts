@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import { api } from '../services/api';
 import { useEventStore } from '../store/eventStore';
+import { refreshPublishedContent } from '../utils/refreshContent';
+import { useRealtimeStore } from '../store/realtimeStore';
 
 interface SyncItem {
   id: number;
@@ -45,7 +47,8 @@ async function showLocalEventNotice(title: string, body: string, id: number) {
   }
 }
 
-const SYNC_INTERVAL_MS = 15_000;
+const SYNC_INTERVAL_CONNECTED_MS = 60_000;
+const SYNC_INTERVAL_FALLBACK_MS = 3_000;
 
 /**
  * Event sync for approved members.
@@ -54,6 +57,7 @@ const SYNC_INTERVAL_MS = 15_000;
  */
 export function useEventRealtime(enabled: boolean) {
   const queryClient = useQueryClient();
+  const streamConnected = useRealtimeStore((s) => s.streamConnected);
   const setLatestToast = useEventStore((s) => s.setLatestToast);
   const setSyncFingerprint = useEventStore((s) => s.setSyncFingerprint);
 
@@ -126,7 +130,7 @@ export function useEventRealtime(enabled: boolean) {
           items.map((item) => [item.id, String(item.updated_at || item.created_at || '')]),
         );
 
-        await queryClientRef.current.invalidateQueries({ queryKey: ['events'] });
+        await refreshPublishedContent(queryClientRef.current);
         await queryClientRef.current.invalidateQueries({ queryKey: ['event'] });
 
         if (changed) {
@@ -152,14 +156,17 @@ export function useEventRealtime(enabled: boolean) {
       if (state === 'active') void poll();
     };
     const sub = AppState.addEventListener('change', onAppState);
-    const interval = setInterval(() => void poll(), SYNC_INTERVAL_MS);
+    const interval = setInterval(
+      () => void poll(),
+      streamConnected ? SYNC_INTERVAL_CONNECTED_MS : SYNC_INTERVAL_FALLBACK_MS,
+    );
 
     return () => {
       cancelled = true;
       sub.remove();
       clearInterval(interval);
     };
-  }, [enabled]);
+  }, [enabled, streamConnected]);
 }
 
 export default useEventRealtime;

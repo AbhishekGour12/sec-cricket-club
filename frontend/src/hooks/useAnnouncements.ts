@@ -45,7 +45,8 @@ export const useAnnouncements = (filters: {
       return response.data;
     },
     enabled: filters.enabled !== false,
-    staleTime: 60 * 1000,
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
     refetchOnMount: false,
     refetchOnReconnect: true,
   });

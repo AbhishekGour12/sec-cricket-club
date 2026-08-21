@@ -47,9 +47,35 @@ export class MemberController {
 
       const { count, rows } = await User.findAndCountAll({
         where: whereClause,
-        limit,
+        attributes: [
+          'id',
+          'full_name',
+          'profile_image',
+          'phone',
+          'alternate_phone',
+          'contact_email',
+          'instagram_url',
+          'facebook_url',
+          'linkedin_url',
+          'membership_number',
+          'designation',
+          'business_name',
+          'business_category',
+          'business_description',
+          'business_address',
+          'business_logo',
+          'visiting_card',
+          'business_images',
+          'city',
+          'state',
+          'country',
+          'website',
+          'achievements',
+          'privacy_settings',
+        ],
+        limit: Math.min(limit, 50),
         offset,
-        order: [['created_at', 'DESC']],
+        order: [['full_name', 'ASC']],
       });
 
       res.status(200).json({

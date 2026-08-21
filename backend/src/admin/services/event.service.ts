@@ -5,6 +5,7 @@ import EventRepository, {
 import Event, { EventStatus } from '../models/Event';
 import { broadcastToApprovedMembers } from '../../services/notification.service';
 import { logger } from '../../utils/logger';
+import { emitContentUpdate } from '../../utils/realtime-publish';
 
 export class EventService {
   public static async listAdmin(filters: EventListFilters) {
@@ -133,6 +134,11 @@ export class EventService {
           action,
           eventId: String(event.id),
         },
+      });
+      emitContentUpdate('event', action, {
+        id: event.id,
+        title: event.event_name,
+        message: title,
       });
     } catch (err) {
       logger.error('[Event] Failed to broadcast push:', err);
