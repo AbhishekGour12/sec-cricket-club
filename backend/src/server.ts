@@ -52,11 +52,13 @@ const startServer = async () => {
     // Attempt database connection
     await connectDatabase();
 
-    // Sync schema in development only. Production must use migrations.
+    // Ensure tables exist in both production and development
     if (process.env.NODE_ENV === 'production') {
-      logger.info('Skipping sequelize.sync({ alter: true }) in production.');
+      logger.info('Ensuring database schema tables exist in production...');
+      await sequelize.sync();
+      logger.info('Database schema verified in production.');
     } else {
-      logger.info('Syncing database models with Supabase Postgres...');
+      logger.info('Syncing database models with Postgres...');
       await sequelize.sync({ alter: true });
       logger.info('Database tables synchronized successfully.');
     }
@@ -64,25 +66,27 @@ const startServer = async () => {
       `Database models initialized: User (${User.name}), BusinessFlyer (${BusinessFlyer.name}), Admin (${Admin.name}), Notification (${Notification.name}), Announcement (${Announcement.name}), AnnouncementRead (${AnnouncementRead.name}), Event (${Event.name}), Sponsor (${Sponsor.name}), EventSponsor (${EventSponsor.name})`,
     );
 
-    if (process.env.NODE_ENV !== 'production') {
-      const adminEmail = 'admin@gmail.com';
-      const existingAdmin = await Admin.findOne({ where: { email: adminEmail } });
-      const hashedPassword = await bcrypt.hash('Admin@123', 10);
-      if (!existingAdmin) {
-        logger.info('Seeding default administrator user in Admins table...');
-        await Admin.create({
-          email: adminEmail,
-          password: hashedPassword,
-          full_name: 'Administrator',
-        });
-        logger.info('Default administrator user seeded successfully.');
-      } else if (!existingAdmin.password) {
-        logger.info('Updating existing admin user credentials...');
-        await existingAdmin.update({
-          password: hashedPassword,
-        });
-        logger.info('Admin user credentials updated successfully.');
-      }
+    // Seed / Ensure Administrator credentials exist (Works in both Dev and Production)
+    const adminEmail = process.env.ADMIN_EMAIL || 'sportsentertainmentclub9@gmail.com';
+    const adminPassword = process.env.ADMIN_PASSWORD || '123456';
+
+    const existingAdmin = await Admin.findOne({ where: { email: adminEmail } });
+    if (!existingAdmin) {
+      logger.info(`Seeding administrator user (${adminEmail}) in Admins table...`);
+      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      await Admin.create({
+        email: adminEmail,
+        password: hashedPassword,
+        full_name: 'Administrator',
+      });
+      logger.info(`Administrator user (${adminEmail}) created successfully.`);
+    } else if (!existingAdmin.password) {
+      logger.info(`Updating administrator credentials for ${adminEmail}...`);
+      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      await existingAdmin.update({
+        password: hashedPassword,
+      });
+      logger.info('Administrator credentials updated successfully.');
     }
 
     // Start Express listener on all network interfaces (0.0.0.0)
