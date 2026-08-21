@@ -62,7 +62,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       localStorage.setItem('admin_user', JSON.stringify(user));
       window.dispatchEvent(new Event('admin-auth-changed'));
       onLoginSuccess(token, user);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       let errMsg = err.response?.data?.message || err.message || 'Invalid email or password';
       if (err.code === 'ECONNABORTED') {
@@ -94,9 +94,9 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
       setResetMessage(
         response.data?.message ||
-          `Password reset link sent to admin email (${targetEmail}). Please check inbox.`
+        `Password reset link sent to admin email (${targetEmail}). Please check inbox.`
       );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       const errMsg =
         err.response?.data?.message ||
@@ -119,14 +119,14 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         {/* Established Tag */}
         <div className="inline-flex items-center space-x-2 bg-[#111B30] border border-[#243260] px-4 py-1.5 rounded-full mb-6">
           <span className="w-2 h-2 rounded-full bg-[#C41230] animate-pulse" />
-          <span className="text-[10px] font-extrabold text-slate-300 tracking-wider">ESTD. 1994</span>
+          <span className="text-[10px] font-extrabold text-slate-300 tracking-wider">ESTD. 2023</span>
         </div>
 
         {/* Circular Logo Frame */}
         <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center p-2 mb-6 border-4 border-[#243260] shadow-xl overflow-hidden group transition-all duration-300 hover:border-[#C41230] hover:scale-105">
-          <img 
-            src={logo} 
-            alt="SEC Logo" 
+          <img
+            src={logo}
+            alt="SEC Logo"
             className="w-20 h-20 object-contain transition-transform duration-500 group-hover:rotate-6"
           />
         </div>
