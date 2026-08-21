@@ -59,18 +59,11 @@ export default function LoginScreen() {
     setLoginError(null);
     setIsSigningIn(true);
     const startMs = Date.now();
-    console.log('[PERF] 🚀 Starting Google Login Flow...');
+    console.log('[PERF] 🚀 Starting Fast Google Login Flow...');
     // Let the spinner paint before native Google SDK work starts.
     await yieldToPaint();
 
     try {
-      // Clear any prior cached Google session so account selector dialog pops up
-      try {
-        await GoogleSignin.signOut();
-      } catch {
-        /* ignore if not previously signed in */
-      }
-
       // Play Services check is Android-only; calling it on iOS can throw.
       if (Platform.OS === 'android') {
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -86,16 +79,27 @@ export default function LoginScreen() {
         throw new Error('Google Sign-In failed: No ID Token returned.');
       }
 
+      let userRes;
       const t2 = Date.now();
-      const credential = GoogleAuthProvider.credential(idToken);
-      const firebaseUserCredential = await signInWithCredential(firebaseAuth, credential);
-      const firebaseIdToken = await firebaseUserCredential.user.getIdToken();
-      console.log(`[PERF] 2. Firebase Client Auth took: ${(Date.now() - t2) / 1000}s`);
+      try {
+        // Fast Path: Authenticate directly with backend using Google OpenID ID Token
+        userRes = await login(idToken);
+        console.log(`[PERF] 2. Direct Backend Auth took: ${(Date.now() - t2) / 1000}s`);
+      } catch (directErr) {
+        console.log('[PERF] Direct Google ID Token backend verification failed, attempting Firebase Client Auth fallback:', directErr);
+        const credential = GoogleAuthProvider.credential(idToken);
+        const firebaseUserCredential = await signInWithCredential(firebaseAuth, credential);
+        const firebaseIdToken = await firebaseUserCredential.user.getIdToken();
+        console.log(`[PERF] 2b. Firebase Client Auth fallback took: ${(Date.now() - t2) / 1000}s`);
+        userRes = await login(firebaseIdToken);
+      }
 
-      const t3 = Date.now();
-      const userRes = await login(firebaseIdToken);
-      console.log(`[PERF] 3. Backend POST /api/auth/google took: ${(Date.now() - t3) / 1000}s`);
       console.log(`[PERF] ✅ TOTAL Google Login Flow completed in: ${(Date.now() - startMs) / 1000}s`);
+
+      // ⚠️ CRITICAL FABRIC FIX: Unmount loading overlay UI BEFORE navigating screens
+      // to avoid React Native Fabric SurfaceMountingManager view insertion crash
+      setIsSigningIn(false);
+      await yieldToPaint();
 
       if (userRes && !userRes.is_profile_completed) {
         router.replace('/profile-completion');
@@ -111,7 +115,6 @@ export default function LoginScreen() {
       } else {
         setLoginError(message || 'Failed to authenticate with Google. Please try again.');
       }
-    } finally {
       setIsSigningIn(false);
     }
   };
@@ -143,6 +146,9 @@ export default function LoginScreen() {
       const firebaseIdToken = await firebaseUserCredential.user.getIdToken();
       const userRes = await login(firebaseIdToken);
 
+      setIsSigningIn(false);
+      await yieldToPaint();
+
       if (userRes && !userRes.is_profile_completed) {
         router.replace('/profile-completion');
       } else {
@@ -156,7 +162,6 @@ export default function LoginScreen() {
         console.error('Apple Auth Login failed:', err);
         setLoginError(message || 'Failed to authenticate with Apple. Please try again.');
       }
-    } finally {
       setIsSigningIn(false);
     }
   };
