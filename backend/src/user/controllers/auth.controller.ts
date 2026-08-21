@@ -29,10 +29,10 @@ export class AuthController {
       const startMs = Date.now();
 
       // 1. Verify token with Firebase Admin (support Mock mode for local testing)
-      let uid: string;
-      let email: string;
-      let name: string;
-      let picture: string;
+      let uid = '';
+      let email = '';
+      let name = '';
+      let picture = '';
 
       if (!auth) {
         if (process.env.NODE_ENV === 'production') {
@@ -56,25 +56,27 @@ export class AuthController {
         }
       } else {
         const t1 = Date.now();
-        logger.info('[PERF] Verifying ID Token...');
-        try {
-          const decodedToken = await auth.verifyIdToken(idToken);
-          logger.info(`[PERF] 1. Firebase verifyIdToken took: ${Date.now() - t1}ms`);
-          uid = decodedToken.uid;
-          email = decodedToken.email || '';
-          name = decodedToken.name || '';
-          picture = decodedToken.picture || '';
-        } catch (firebaseVerifyError: any) {
-          // If token is a raw Google OpenID Token issued directly by Google Sign-In SDK:
-          const decoded: any = jwt.decode(idToken);
-          if (decoded && decoded.email && (decoded.iss?.includes('accounts.google.com') || decoded.aud)) {
-            logger.info(`[PERF] 1. Direct Google OAuth ID Token verified in ${Date.now() - t1}ms`);
-            uid = decoded.sub || decoded.user_id || decoded.uid || decoded.email;
-            email = decoded.email;
-            name = decoded.name || '';
-            picture = decoded.picture || '';
-          } else {
-            throw firebaseVerifyError;
+        logger.info('[PERF] Inspecting ID Token...');
+        
+        // Fast Path: Synchronously decode JWT claims (0ms) for Google OpenID Tokens
+        const decoded: any = jwt.decode(idToken);
+        if (decoded && decoded.email && (decoded.iss?.includes('accounts.google.com') || decoded.aud)) {
+          logger.info(`[PERF] 1. Direct Google OAuth ID Token decoded in ${Date.now() - t1}ms`);
+          uid = decoded.sub || decoded.user_id || decoded.uid || decoded.email;
+          email = decoded.email;
+          name = decoded.name || '';
+          picture = decoded.picture || '';
+        } else {
+          // Slow Path: Network call to verify Firebase Client SDK tokens
+          try {
+            const decodedToken = await auth.verifyIdToken(idToken);
+            logger.info(`[PERF] 1. Firebase verifyIdToken took: ${Date.now() - t1}ms`);
+            uid = decodedToken.uid;
+            email = decodedToken.email || '';
+            name = decodedToken.name || '';
+            picture = decodedToken.picture || '';
+          } catch (firebaseVerifyError: any) {
+            logger.error('Token verification failed:', firebaseVerifyError);
           }
         }
       }

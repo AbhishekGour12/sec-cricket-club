@@ -66,7 +66,7 @@ export default function LoginScreen() {
     try {
       // Play Services check is Android-only; calling it on iOS can throw.
       if (Platform.OS === 'android') {
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: false });
       }
 
       const t1 = Date.now();
