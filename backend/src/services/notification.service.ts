@@ -7,6 +7,8 @@ export interface PushPayload {
   title: string;
   body: string;
   data?: Record<string, string>;
+  /** Data-only: refresh client caches without showing a banner. */
+  silent?: boolean;
 }
 
 const isExpoPushToken = (token: string) =>
@@ -20,20 +22,30 @@ async function sendExpoPushNotification(token: string, payload: PushPayload): Pr
       'Accept-Encoding': 'gzip, deflate',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      to: token,
-      sound: 'default',
-      title: payload.title,
-      body: payload.body,
-      data: payload.data ?? {},
-      priority: 'high',
-      channelId:
-        payload.data?.type === 'event'
-          ? 'events'
-          : payload.data?.type === 'announcement'
-            ? 'announcements'
-            : 'default',
-    }),
+    body: JSON.stringify(
+      payload.silent
+        ? {
+            to: token,
+            data: payload.data ?? {},
+            priority: 'high',
+            contentAvailable: true,
+            _contentAvailable: true,
+          }
+        : {
+            to: token,
+            sound: 'default',
+            title: payload.title,
+            body: payload.body,
+            data: payload.data ?? {},
+            priority: 'high',
+            channelId:
+              payload.data?.type === 'event'
+                ? 'events'
+                : payload.data?.type === 'announcement'
+                  ? 'announcements'
+                  : 'default',
+          },
+    ),
   });
 
   if (!response.ok) {
@@ -64,36 +76,46 @@ export async function sendPushNotification(
       return;
     }
 
-    const message: admin.messaging.Message = {
-      token: fcmToken,
-      notification: {
-        title: payload.title,
-        body: payload.body,
-      },
-      data: payload.data ?? {},
-      android: {
-        priority: 'high',
-        notification: {
-          sound: 'default',
-          channelId:
-            payload.data?.type === 'event'
-              ? 'events'
-              : payload.data?.type === 'announcement'
-                ? 'announcements'
-                : 'default',
-          icon: 'notification_icon',
-          color: '#1A2744',
-        },
-      },
-      apns: {
-        payload: {
-          aps: {
-            sound: 'default',
-            badge: 1,
+    const message: admin.messaging.Message = payload.silent
+      ? {
+          token: fcmToken,
+          data: payload.data ?? {},
+          android: { priority: 'high' },
+          apns: {
+            headers: { 'apns-priority': '5', 'apns-push-type': 'background' },
+            payload: { aps: { 'content-available': 1 } },
           },
-        },
-      },
-    };
+        }
+      : {
+          token: fcmToken,
+          notification: {
+            title: payload.title,
+            body: payload.body,
+          },
+          data: payload.data ?? {},
+          android: {
+            priority: 'high',
+            notification: {
+              sound: 'default',
+              channelId:
+                payload.data?.type === 'event'
+                  ? 'events'
+                  : payload.data?.type === 'announcement'
+                    ? 'announcements'
+                    : 'default',
+              icon: 'notification_icon',
+              color: '#1A2744',
+            },
+          },
+          apns: {
+            payload: {
+              aps: {
+                sound: 'default',
+                badge: 1,
+              },
+            },
+          },
+        };
 
     const response = await admin.messaging().send(message);
     logger.info(`[Notification] FCM push sent — messageId: ${response}`);

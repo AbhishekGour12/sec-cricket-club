@@ -69,9 +69,10 @@ export default function MemberProfileScreen() {
   }, [member?.business_category]);
 
   const joinedLabel = useMemo(() => {
-    if (!member?.created_at) return null;
+    const createdAt = member?.created_at;
+    if (!createdAt) return null;
     try {
-      return new Date(member.created_at).toLocaleDateString(undefined, {
+      return new Date(createdAt).toLocaleDateString(undefined, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -321,7 +322,7 @@ export default function MemberProfileScreen() {
 
         <View style={styles.actions}>
           <ActionTile icon="phone" label="Call" onPress={handleCall} />
-          <ActionTile icon="share" label="WhatsApp" onPress={handleWhatsApp} />
+          <ActionTile icon="whatsapp" label="WhatsApp" onPress={handleWhatsApp} iconColor="#25D366" />
           <ActionTile icon="email" label="Email" onPress={handleEmail} />
         </View>
       </>
@@ -367,14 +368,16 @@ function ActionTile({
   icon,
   label,
   onPress,
+  iconColor,
 }: {
   icon: IconName;
   label: string;
   onPress: () => void;
+  iconColor?: string;
 }) {
   return (
     <Pressable style={styles.actionTile} onPress={onPress} accessibilityRole="button">
-      <ThemeIcon name={icon} size={22} color={Colors.primary} />
+      <ThemeIcon name={icon} size={22} color={iconColor ?? Colors.primary} />
       <Text style={styles.actionLabel}>{label}</Text>
     </Pressable>
   );

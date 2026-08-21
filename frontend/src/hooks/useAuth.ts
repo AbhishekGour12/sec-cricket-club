@@ -41,6 +41,17 @@ export const useAuth = () => {
     },
   });
 
+  // Mutation: Delete Account
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      await AuthApi.deleteAccount();
+      await store.logout();
+    },
+    onSuccess: () => {
+      queryClient.clear();
+    },
+  });
+
   return {
     // State from store
     user: store.user,
@@ -54,6 +65,8 @@ export const useAuth = () => {
     isLoggingIn: loginMutation.isPending,
     logout: logoutMutation.mutateAsync,
     isLoggingOut: logoutMutation.isPending,
+    deleteAccount: deleteAccountMutation.mutateAsync,
+    isDeletingAccount: deleteAccountMutation.isPending,
     restoreSession: store.restoreSession,
     
     // Query direct access

@@ -220,7 +220,7 @@ export const Members: React.FC = () => {
       });
       setCategories(response.data.categories || []);
     } catch (err: any) {
-      console.error('Error fetching categories:', err);
+      // Sanitized error handling
     }
   };
 
@@ -276,11 +276,11 @@ export const Members: React.FC = () => {
       setMembers(filtered.slice(startIndex, startIndex + itemsPerPage));
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load members.');
-      console.error('Error fetching members:', err);
     } finally {
       setIsLoading(false);
     }
   };
+
 
   /**
    * Opens the detail drawer. The row we already have is shown immediately, then

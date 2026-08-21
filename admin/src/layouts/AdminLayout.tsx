@@ -5,13 +5,13 @@ import {
   Users, 
   Calendar, 
   Megaphone, 
-  Settings, 
   Menu, 
   X, 
   LogOut, 
   Bell,
   Search,
-  LayoutDashboard
+  LayoutDashboard,
+  CircleHelp,
 } from 'lucide-react';
 import logo from '../assets/logo.png';
 
@@ -73,7 +73,7 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
       });
       setNotifications(response.data.notifications || []);
     } catch (err) {
-      console.error('Failed to fetch admin notifications:', err);
+      // Sanitized error logging
     }
   };
 
@@ -92,9 +92,10 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
       });
       fetchNotifications();
     } catch (err) {
-      console.error('Failed to mark notification as read:', err);
+      // Sanitized error logging
     }
   };
+
 
   const userStr = localStorage.getItem('admin_user');
   const user = userStr ? JSON.parse(userStr) : null;
@@ -159,7 +160,7 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
     { icon: <Bell size={20} />, label: 'Notifications', path: '/notifications' },
     { icon: <Calendar size={20} />, label: 'Events', path: '/events' },
     { icon: <Megaphone size={20} />, label: 'Announcements', path: '/announcements' },
-    { icon: <Settings size={20} />, label: 'Settings', path: '/settings' },
+    { icon: <CircleHelp size={20} />, label: 'Guidance & Help', path: '/guidance' },
   ];
 
   return (

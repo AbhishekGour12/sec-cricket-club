@@ -7,7 +7,6 @@ import {
   Megaphone,
   ArrowUpRight,
   ArrowDownRight,
-  Activity,
   Clock,
   Bell,
   Loader2,
@@ -16,7 +15,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { AdminLayout } from '../layouts/AdminLayout';
-import { adminApi, getApiUrl } from '../lib/api';
+import { adminApi } from '../lib/api';
 
 interface DashboardMetrics {
   total_members: number;
@@ -58,12 +57,6 @@ interface DashboardRecent {
     venue_name: string;
     is_featured?: boolean;
   }>;
-}
-
-interface DashboardHealth {
-  api: string;
-  database: string;
-  checked_at: string;
 }
 
 interface MetricCardProps {
@@ -129,10 +122,8 @@ const formatDate = (value?: string) => {
 export const Dashboard: React.FC = () => {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recent, setRecent] = useState<DashboardRecent | null>(null);
-  const [health, setHealth] = useState<DashboardHealth | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const apiURL = getApiUrl();
 
   const fetchStats = useCallback(async () => {
     setIsLoading(true);
@@ -141,7 +132,6 @@ export const Dashboard: React.FC = () => {
       const { data } = await adminApi.get('/admin/dashboard/stats');
       setMetrics(data.metrics);
       setRecent(data.recent);
-      setHealth(data.health);
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Failed to load dashboard stats');
     } finally {
@@ -335,51 +325,6 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center space-x-2 text-[#1A2744] font-extrabold mb-4">
-                <Activity size={18} className="text-[#C41230]" />
-                <h2>System Connection Health</h2>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-[#F0F2F7] p-4 rounded-xl border border-slate-200 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-[#3A4260] font-bold">POSTGRESQL (SUPABASE)</p>
-                    <p className="text-sm text-[#0E1525] font-semibold mt-1">
-                      Database connection
-                    </p>
-                  </div>
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                      health?.database === 'connected'
-                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                        : 'bg-red-100 text-red-800 border-red-300'
-                    }`}
-                  >
-                    {health?.database === 'connected' ? 'Connected' : 'Disconnected'}
-                  </span>
-                </div>
-                <div className="bg-[#F0F2F7] p-4 rounded-xl border border-slate-200 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-[#3A4260] font-bold">EXPRESS API SERVICE</p>
-                    <p className="text-sm text-[#0E1525] font-semibold mt-1">{apiURL}</p>
-                  </div>
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                      health?.api === 'online'
-                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                        : 'bg-red-100 text-red-800 border-red-300'
-                    }`}
-                  >
-                    {health?.api === 'online' ? 'Online' : 'Offline'}
-                  </span>
-                </div>
-              </div>
-              {health?.checked_at && (
-                <p className="text-[11px] text-[#7A85A0] mt-3">
-                  Last checked: {new Date(health.checked_at).toLocaleString()}
-                </p>
-              )}
-            </div>
           </>
         )}
       </div>

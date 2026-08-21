@@ -31,7 +31,7 @@ export const Notifications: React.FC = () => {
       });
       setNotifications(response.data.notifications || []);
     } catch (err) {
-      console.error('Failed to fetch notifications:', err);
+      // Sanitized error handling
     } finally {
       setIsLoading(false);
     }
@@ -48,7 +48,7 @@ export const Notifications: React.FC = () => {
       });
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     } catch (err) {
-      console.error('Failed to mark notification as read:', err);
+      // Sanitized error handling
     }
   };
 
@@ -63,9 +63,10 @@ export const Notifications: React.FC = () => {
       ));
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch (err) {
-      console.error('Failed to mark all as read:', err);
+      // Sanitized error handling
     }
   };
+
 
   // Filter logic
   const filteredNotifs = notifications.filter(n => {

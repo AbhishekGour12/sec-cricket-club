@@ -6,7 +6,10 @@ import { Notifications } from './pages/Notifications';
 import { Announcements } from './pages/Announcements';
 import { Events } from './pages/Events';
 import { Dashboard } from './pages/Dashboard';
+import { Guidance } from './pages/Guidance';
+import { ResetPassword } from './pages/ResetPassword';
 import { adminApi, clearAdminSession } from './lib/api';
+
 
 export const App: React.FC = () => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('admin_jwt'));
@@ -85,10 +88,13 @@ export const App: React.FC = () => {
             )
           }
         />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/members" element={requireAuth(<Members />)} />
+
         <Route path="/notifications" element={requireAuth(<Notifications />)} />
         <Route path="/announcements" element={requireAuth(<Announcements />)} />
         <Route path="/events" element={requireAuth(<Events />)} />
+        <Route path="/guidance" element={requireAuth(<Guidance />)} />
         <Route path="/" element={requireAuth(<Dashboard />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

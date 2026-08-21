@@ -57,22 +57,32 @@ export class AnnouncementService {
   }
 
   public static async unpublish(id: number, adminId: number) {
-    return AnnouncementRepository.update(id, {
+    const unpublished = await AnnouncementRepository.update(id, {
       status: 'Draft',
       updated_by: adminId,
     } as any);
+    if (unpublished) {
+      void AnnouncementService.notifyMembers(unpublished, 'unpublished');
+    }
+    return unpublished;
   }
 
   public static async notifyMembers(
     announcement: Announcement,
-    action: 'published' | 'updated',
+    action: 'published' | 'updated' | 'unpublished',
   ) {
     try {
+      const silent = action === 'unpublished';
       const title =
-        action === 'published' ? 'New Club Announcement' : 'Announcement Updated';
+        action === 'published'
+          ? 'New Club Announcement'
+          : action === 'updated'
+            ? 'Announcement Updated'
+            : 'Announcement Unpublished';
       await broadcastToApprovedMembers({
         title,
         body: announcement.title,
+        silent,
         data: {
           type: 'announcement',
           action,

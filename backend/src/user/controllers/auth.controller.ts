@@ -31,6 +31,13 @@ export class AuthController {
       let picture: string;
 
       if (!auth) {
+        if (process.env.NODE_ENV === 'production') {
+          res.status(503).json({
+            error: 'Configuration Error',
+            message: 'Google Sign-In is temporarily unavailable.',
+          });
+          return;
+        }
         if (idToken === 'mock-admin-token' || idToken === 'mock-member-token') {
           uid = idToken === 'mock-admin-token' ? 'mock-admin-uid-123' : 'mock-member-uid-123';
           email = idToken === 'mock-admin-token' ? 'admin-bypass@sec.com' : 'member@sec.com';

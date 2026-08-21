@@ -6,6 +6,7 @@ export class ApprovalRepository {
       where: {
         approval_status: 'pending',
       },
+      attributes: { exclude: ['fcm_token'] },
       order: [['created_at', 'DESC']],
     });
   }
@@ -15,6 +16,7 @@ export class ApprovalRepository {
       where: {
         approval_status: 'approved',
       },
+      attributes: { exclude: ['fcm_token'] },
       order: [['created_at', 'DESC']],
     });
   }
@@ -24,12 +26,13 @@ export class ApprovalRepository {
       where: {
         approval_status: 'rejected',
       },
+      attributes: { exclude: ['fcm_token'] },
       order: [['created_at', 'DESC']],
     });
   }
 
   public static async findById(id: number): Promise<User | null> {
-    return await User.findByPk(id);
+    return await User.findByPk(id, { attributes: { exclude: ['fcm_token'] } });
   }
 
   public static async updateApproval(

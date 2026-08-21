@@ -112,5 +112,128 @@ export class AuthController {
       });
     }
   }
+
+  /**
+   * Request password reset link.
+   * POST /api/admin/auth/request-password-reset
+   */
+  public static async requestPasswordReset(req: Request, res: Response): Promise<void> {
+    try {
+      const inputEmail = req.body?.email?.trim()?.toLowerCase();
+      const adminEmail = (process.env.ADMIN_EMAIL || 'sportsentertainmentclub9@gmail.com').trim().toLowerCase();
+
+      // If specific email submitted, ensure it matches the target admin email
+      const targetEmail = inputEmail || adminEmail;
+
+      if (targetEmail !== adminEmail) {
+        // Return friendly message without leaking email existence
+        res.status(200).json({
+          message: `If an account exists for ${targetEmail}, a password reset link has been dispatched to it.`,
+        });
+        return;
+      }
+
+      // Find admin account
+      let admin = await Admin.findOne({ where: { email: adminEmail } });
+
+      if (!admin) {
+        // If admin record does not exist in DB yet, create or find first admin
+        const firstAdmin = await Admin.findOne();
+        if (firstAdmin) {
+          admin = firstAdmin;
+        } else {
+          // Create default admin entry if database is completely empty
+          admin = await Admin.create({
+            email: adminEmail,
+            full_name: 'Administrator',
+          });
+        }
+      }
+
+      const { generateResetToken } = await import('../../utils/jwt');
+      const { sendAdminPasswordResetEmail } = await import('../../utils/mailer');
+
+      const resetToken = generateResetToken({ id: admin.id, email: admin.email });
+      const frontendBaseUrl = process.env.ADMIN_FRONTEND_URL || 'http://localhost:5173';
+      const resetUrl = `${frontendBaseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+      await sendAdminPasswordResetEmail(admin.email, resetUrl);
+
+      res.status(200).json({
+        message: `Password reset link has been successfully dispatched to ${admin.email}`,
+      });
+    } catch (error) {
+      logger.error('Error in requestPasswordReset:', error);
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Failed to process password reset request',
+      });
+    }
+  }
+
+  /**
+   * Reset password with encrypted token.
+   * POST /api/admin/auth/reset-password
+   */
+  public static async resetPassword(req: Request, res: Response): Promise<void> {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token || !newPassword) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'Token and new password are required',
+        });
+        return;
+      }
+
+      if (typeof newPassword !== 'string' || newPassword.length < 6) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'New password must be at least 6 characters long',
+        });
+        return;
+      }
+
+      const { verifyResetToken } = await import('../../utils/jwt');
+      let payload;
+      try {
+        payload = verifyResetToken(token);
+      } catch (tokenErr) {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'Password reset link is invalid or has expired. Please request a new link.',
+        });
+        return;
+      }
+
+      const admin = await Admin.findByPk(payload.id);
+      if (!admin) {
+        res.status(404).json({
+          error: 'Not Found',
+          message: 'Administrator account was not found',
+        });
+        return;
+      }
+
+      // Hash new password and save to DB
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      admin.password = hashedPassword;
+      await admin.save();
+
+      logger.info(`Admin password successfully updated in database for ID ${admin.id} (${admin.email})`);
+
+      res.status(200).json({
+        message: 'Password has been updated successfully. You can now log in with your new password.',
+      });
+    } catch (error) {
+      logger.error('Error resetting password:', error);
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Failed to reset password',
+      });
+    }
+  }
 }
 export default AuthController;
+

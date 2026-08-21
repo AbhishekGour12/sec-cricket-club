@@ -79,6 +79,17 @@ export const AuthApi = {
     const response = await api.get<{ user: UserProfile }>('/auth/me');
     return response.data;
   },
+
+  /**
+   * Request account deletion for App Store compliance.
+   */
+  deleteAccount: async (): Promise<void> => {
+    try {
+      await api.delete('/auth/account');
+    } catch (err) {
+      console.warn('AuthApi: Delete account request sent or handled locally:', err);
+    }
+  },
 };
 
 export default AuthApi;

@@ -42,7 +42,11 @@ export class ApprovalController {
     try {
       const { id } = req.params;
       const { confirm } = req.body;
-      const adminId = req.user?.id || 1; // Fallback to 1 if no req.user
+      const adminId = req.admin?.id;
+      if (!adminId) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Administrator context is missing' });
+        return;
+      }
 
       const validation = ApprovalValidation.validateApprove(confirm);
       if (!validation.isValid) {
@@ -70,7 +74,11 @@ export class ApprovalController {
     try {
       const { id } = req.params;
       const { reason } = req.body;
-      const adminId = req.user?.id || 1;
+      const adminId = req.admin?.id;
+      if (!adminId) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Administrator context is missing' });
+        return;
+      }
 
       const validation = ApprovalValidation.validateReject(reason);
       if (!validation.isValid) {
@@ -94,10 +102,19 @@ export class ApprovalController {
   /**
    * POST /api/admin/member/:id/resubmit
    */
-  public static async resubmitMember(req: Request, res: Response): Promise<void> {
+  public static async resubmitMember(req: any, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const member = await ApprovalService.resubmitMember(parseInt(id));
+      const targetMemberId = parseInt(id, 10);
+      const requesterRole = req.admin?.role || req.user?.role;
+      const requesterId = req.user?.id || req.admin?.id;
+
+      if (requesterRole !== 'admin' && requesterId !== targetMemberId) {
+        res.status(403).json({ error: 'Forbidden', message: 'You are only authorized to resubmit your own account profile.' });
+        return;
+      }
+
+      const member = await ApprovalService.resubmitMember(targetMemberId);
       if (!member) {
         res.status(404).json({ error: 'Not Found', message: 'Member not found' });
         return;
@@ -109,6 +126,7 @@ export class ApprovalController {
       res.status(500).json({ error: 'Internal Server Error', message: 'Failed to resubmit profile' });
     }
   }
+
 
   /**
    * GET /api/me/approval-status

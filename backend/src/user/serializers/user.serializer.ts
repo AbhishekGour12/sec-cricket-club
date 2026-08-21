@@ -48,29 +48,43 @@ export const serializeSelf = (user: User) => ({
 });
 
 /**
- * A member as seen by another member. Fields the owner marked hidden are
- * stripped entirely rather than sent with a flag, so they never reach a device.
+ * A member as seen by another member. Only directory-safe fields are returned.
  */
 export const serializePublic = (user: User, viewerId?: number) => {
-  const full = serializeSelf(user);
-
-  // A member always sees their own record in full.
-  if (viewerId && viewerId === user.id) return full;
+  if (viewerId && viewerId === user.id) return serializeSelf(user);
 
   const privacy = normalizePrivacy(user.privacy_settings);
-  const visible: Record<string, unknown> = { ...full };
+  const visible: Record<string, unknown> = {
+    id: user.id,
+    full_name: user.full_name,
+    profile_image: user.profile_image,
+    membership_number: user.membership_number,
+    designation: user.designation,
+    business_name: user.business_name,
+    business_category: user.business_category,
+    business_description: user.business_description,
+    business_address: user.business_address,
+    business_logo: user.business_logo,
+    visiting_card: user.visiting_card,
+    business_images: user.business_images,
+    city: user.city,
+    state: user.state,
+    country: user.country,
+    achievements: normalizeAchievements(user.achievements),
+    phone: user.phone,
+    alternate_phone: user.alternate_phone,
+    contact_email: user.contact_email,
+    instagram_url: user.instagram_url,
+    facebook_url: user.facebook_url,
+    linkedin_url: user.linkedin_url,
+    website: user.website,
+  };
 
   PRIVACY_FIELDS.forEach((field) => {
     if (privacy[field] === 'hidden') {
       visible[field] = null;
     }
   });
-
-  delete visible.privacy_settings;
-  delete visible.bookmarked_members;
-  // Visiting card front/back images are visible on member profiles; status remains private.
-  delete visible.visiting_card_status;
-  delete visible.visiting_card_rejection_reason;
 
   return visible;
 };

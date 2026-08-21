@@ -47,19 +47,21 @@ const storage = multer.diskStorage({
   },
 });
 
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
 const imageFileFilter = (_req: any, file: any, cb: any) => {
-  if (file.mimetype.startsWith('image/')) {
+  if (ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only images are allowed (jpg, jpeg, png, webp, gif)'), false);
+    cb(new Error('Only jpg, png, webp, and gif images are allowed'), false);
   }
 };
 
 const announcementFileFilter = (_req: any, file: any, cb: any) => {
-  if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+  if (ALLOWED_IMAGE_TYPES.has(file.mimetype) || file.mimetype === 'application/pdf') {
     cb(null, true);
   } else {
-    cb(new Error('Only images and PDF files are allowed'), false);
+    cb(new Error('Only jpg, png, webp, gif, and PDF files are allowed'), false);
   }
 };
 

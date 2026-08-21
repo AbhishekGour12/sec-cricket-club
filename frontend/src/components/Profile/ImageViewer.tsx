@@ -114,7 +114,9 @@ export function ImageViewer({
 
   useEffect(() => {
     if (visible) {
-      setIndex(initialIndex);
+      queueMicrotask(() => {
+        setIndex(initialIndex);
+      });
     }
   }, [visible, initialIndex]);
 

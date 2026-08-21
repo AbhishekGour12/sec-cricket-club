@@ -236,28 +236,32 @@ export class EventRepository {
   /** Lightweight fingerprint for near-realtime mobile polling. */
   public static async getSyncSnapshot() {
     const today = new Date().toISOString().slice(0, 10);
-    const rows = await Event.findAll({
-      where: {
-        status: 'Published',
-        event_date: { [Op.gte]: today },
-      },
-      attributes: ['id', 'event_name', 'updated_at', 'created_at', 'event_date', 'is_featured'],
-      order: [
-        ['updated_at', 'DESC'],
-        ['id', 'DESC'],
-      ],
-      limit: 15,
-    });
+    const where = {
+      status: 'Published' as const,
+      event_date: { [Op.gte]: today },
+    };
 
-    const latestUpdated = rows[0]?.updated_at ? new Date(rows[0].updated_at).getTime() : 0;
-    const fingerprint = `${rows.length}:${latestUpdated}:${rows
-      .map((r) => `${r.id}:${new Date(r.updated_at).getTime()}`)
-      .join(',')}`;
+    const [count, latestUpdatedAt, rows] = await Promise.all([
+      Event.count({ where }),
+      Event.max('updated_at', { where }),
+      Event.findAll({
+        where,
+        attributes: ['id', 'event_name', 'updated_at', 'created_at', 'event_date', 'is_featured'],
+        order: [
+          ['updated_at', 'DESC'],
+          ['id', 'DESC'],
+        ],
+        limit: 15,
+      }),
+    ]);
+
+    const latestMs = latestUpdatedAt ? new Date(String(latestUpdatedAt)).getTime() : 0;
+    const fingerprint = `${count}:${latestMs}`;
 
     return {
       fingerprint,
-      count: rows.length,
-      latest_updated_at: rows[0]?.updated_at ?? null,
+      count,
+      latest_updated_at: latestUpdatedAt ? String(latestUpdatedAt) : null,
       items: rows.map((r) => ({
         id: r.id,
         title: r.event_name,

@@ -184,33 +184,39 @@ export class AnnouncementRepository {
 
   public static async getSyncSnapshot() {
     const now = new Date();
-    const rows = await Announcement.findAll({
-      where: {
-        status: 'Published' as AnnouncementStatus,
-        [Op.and]: [
-          {
-            [Op.or]: [{ publish_date: null }, { publish_date: { [Op.lte]: now } }],
-          },
-          {
-            [Op.or]: [{ expiry_date: null }, { expiry_date: { [Op.gt]: now } }],
-          },
-        ],
-      },
-      attributes: ['id', 'title', 'short_description', 'updated_at', 'created_at', 'publish_date'],
-      order: [
-        ['updated_at', 'DESC'],
-        ['id', 'DESC'],
+    const where = {
+      status: 'Published' as AnnouncementStatus,
+      [Op.and]: [
+        {
+          [Op.or]: [{ publish_date: null }, { publish_date: { [Op.lte]: now } }],
+        },
+        {
+          [Op.or]: [{ expiry_date: null }, { expiry_date: { [Op.gt]: now } }],
+        },
       ],
-      limit: 10,
-    });
+    };
 
-    const latestUpdated = rows[0]?.updated_at ? new Date(rows[0].updated_at).getTime() : 0;
-    const fingerprint = `${rows.length}:${latestUpdated}:${rows.map((r) => `${r.id}:${new Date(r.updated_at).getTime()}`).join(',')}`;
+    const [count, latestUpdatedAt, rows] = await Promise.all([
+      Announcement.count({ where }),
+      Announcement.max('updated_at', { where }),
+      Announcement.findAll({
+        where,
+        attributes: ['id', 'title', 'short_description', 'updated_at', 'created_at', 'publish_date'],
+        order: [
+          ['updated_at', 'DESC'],
+          ['id', 'DESC'],
+        ],
+        limit: 10,
+      }),
+    ]);
+
+    const latestMs = latestUpdatedAt ? new Date(String(latestUpdatedAt)).getTime() : 0;
+    const fingerprint = `${count}:${latestMs}`;
 
     return {
       fingerprint,
-      count: rows.length,
-      latest_updated_at: rows[0]?.updated_at ?? null,
+      count,
+      latest_updated_at: latestUpdatedAt ? String(latestUpdatedAt) : null,
       items: rows.map((r) => ({
         id: r.id,
         title: r.title,

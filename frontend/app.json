@@ -12,9 +12,13 @@
       "bundleIdentifier": "com.seccricketclub.app",
       "googleServicesFile": "./GoogleService-Info.plist",
       "supportsTablet": false,
+      "usesAppleSignIn": true,
       "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "SEC Cricket Club requires camera access to take your profile picture, visiting card photos, and business flyer images.",
+        "NSPhotoLibraryUsageDescription": "SEC Cricket Club requires photo library access to upload your profile picture, business logo, visiting card, and business flyer images.",
+        "NSPhotoLibraryAddUsageDescription": "SEC Cricket Club requires permission to save business cards and images to your photo gallery."
       }
     },
     "android": {
@@ -26,7 +30,13 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.seccricketclub.app",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "POST_NOTIFICATIONS",
+        "INTERNET"
+      ]
     },
     "web": {
       "output": "static",
@@ -34,6 +44,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {
@@ -46,8 +57,8 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "SEC Cricket Club needs camera access to take your profile photo, visiting card photos, and business flyer images.",
-          "photosPermission": "SEC Cricket Club needs photo library access to upload your profile picture, business logo, visiting card, and business flyer images.",
+          "cameraPermission": "SEC Cricket Club requires camera access to take your profile picture, visiting card photos, and business flyer images.",
+          "photosPermission": "SEC Cricket Club requires photo library access to upload your profile picture, business logo, visiting card, and business flyer images.",
           "microphonePermission": false
         }
       ],

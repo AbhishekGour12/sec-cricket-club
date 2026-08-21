@@ -97,7 +97,11 @@ export class EventService {
   }
 
   public static async unpublish(id: number, adminId: number) {
-    return EventRepository.setStatus(id, 'Draft', adminId);
+    const unpublished = await EventRepository.setStatus(id, 'Draft', adminId);
+    if (unpublished) {
+      void EventService.notifyMembers(unpublished, 'unpublished');
+    }
+    return unpublished;
   }
 
   public static async setStatus(id: number, status: EventStatus, adminId: number) {
@@ -108,12 +112,22 @@ export class EventService {
     return updated;
   }
 
-  public static async notifyMembers(event: Event, action: 'published' | 'updated') {
+  public static async notifyMembers(
+    event: Event,
+    action: 'published' | 'updated' | 'unpublished',
+  ) {
     try {
-      const title = action === 'published' ? 'New Club Event' : 'Event Updated';
+      const silent = action === 'unpublished';
+      const title =
+        action === 'published'
+          ? 'New Club Event'
+          : action === 'updated'
+            ? 'Event Updated'
+            : 'Event Unpublished';
       await broadcastToApprovedMembers({
         title,
         body: event.event_name,
+        silent,
         data: {
           type: 'event',
           action,

@@ -5,7 +5,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 // Public Firebase client config (same values as google-services / GoogleService-Info).
-// Prefer EXPO_PUBLIC_* overrides when set via EAS secrets.
+// Ignore a web App ID override on native so iOS/Android keep their platform apps.
+const envAppId = process.env.EXPO_PUBLIC_FIREBASE_APP_ID;
+const nativeAppId =
+  Platform.OS === 'ios'
+    ? '1:837780082237:ios:a25e66d808dc7f4f9f2454'
+    : '1:837780082237:android:7086e0fe585fa2119f2454';
+
 const firebaseConfig = {
   apiKey:
     process.env.EXPO_PUBLIC_FIREBASE_API_KEY ||
@@ -20,10 +26,11 @@ const firebaseConfig = {
   messagingSenderId:
     process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '837780082237',
   appId:
-    process.env.EXPO_PUBLIC_FIREBASE_APP_ID ||
-    (Platform.OS === 'ios'
-      ? '1:837780082237:ios:a25e66d808dc7f4f9f2454'
-      : '1:837780082237:android:7086e0fe585fa2119f2454'),
+    Platform.OS === 'web'
+      ? envAppId || '1:837780082237:web:831a184b6879cbe99f2454'
+      : envAppId && !envAppId.includes(':web:')
+        ? envAppId
+        : nativeAppId,
   measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 

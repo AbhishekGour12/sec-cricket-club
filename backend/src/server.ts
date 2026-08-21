@@ -51,32 +51,37 @@ const startServer = async () => {
     // Attempt database connection
     await connectDatabase();
 
-    // Sync models
-    logger.info('Syncing database models with Supabase Postgres...');
-    await sequelize.sync({ alter: true });
-    logger.info('Database tables synchronized successfully.');
+    // Sync schema in development only. Production must use migrations.
+    if (process.env.NODE_ENV === 'production') {
+      logger.info('Skipping sequelize.sync({ alter: true }) in production.');
+    } else {
+      logger.info('Syncing database models with Supabase Postgres...');
+      await sequelize.sync({ alter: true });
+      logger.info('Database tables synchronized successfully.');
+    }
     logger.info(
       `Database models initialized: User (${User.name}), BusinessFlyer (${BusinessFlyer.name}), Admin (${Admin.name}), Notification (${Notification.name}), Announcement (${Announcement.name}), AnnouncementRead (${AnnouncementRead.name}), Event (${Event.name}), Sponsor (${Sponsor.name}), EventSponsor (${EventSponsor.name})`,
     );
 
-    // Seed default admin user in Admins table if not exists or update credentials if needed
-    const adminEmail = 'admin@gmail.com';
-    const existingAdmin = await Admin.findOne({ where: { email: adminEmail } });
-    const hashedPassword = await bcrypt.hash('Admin@123', 10);
-    if (!existingAdmin) {
-      logger.info('Seeding default administrator user in Admins table...');
-      await Admin.create({
-        email: adminEmail,
-        password: hashedPassword,
-        full_name: 'Administrator',
-      });
-      logger.info('Default administrator user seeded successfully.');
-    } else if (!existingAdmin.password) {
-      logger.info('Updating existing admin user credentials...');
-      await existingAdmin.update({
-        password: hashedPassword,
-      });
-      logger.info('Admin user credentials updated successfully.');
+    if (process.env.NODE_ENV !== 'production') {
+      const adminEmail = 'admin@gmail.com';
+      const existingAdmin = await Admin.findOne({ where: { email: adminEmail } });
+      const hashedPassword = await bcrypt.hash('Admin@123', 10);
+      if (!existingAdmin) {
+        logger.info('Seeding default administrator user in Admins table...');
+        await Admin.create({
+          email: adminEmail,
+          password: hashedPassword,
+          full_name: 'Administrator',
+        });
+        logger.info('Default administrator user seeded successfully.');
+      } else if (!existingAdmin.password) {
+        logger.info('Updating existing admin user credentials...');
+        await existingAdmin.update({
+          password: hashedPassword,
+        });
+        logger.info('Admin user credentials updated successfully.');
+      }
     }
 
     // Start Express listener on all network interfaces (0.0.0.0)

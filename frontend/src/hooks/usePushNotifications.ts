@@ -10,12 +10,16 @@ import { useQueryClient } from '@tanstack/react-query';
 
 try {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
+    handleNotification: async (notification) => {
+      const action = (notification.request.content.data as { action?: string } | undefined)?.action;
+      const silent = action === 'unpublished';
+      return {
+        shouldShowBanner: !silent,
+        shouldShowList: !silent,
+        shouldPlaySound: !silent,
+        shouldSetBadge: !silent,
+      };
+    },
   });
 } catch {
   // Handler setup can fail in some runtimes — ignore.
@@ -53,16 +57,8 @@ async function registerForPushAsync(): Promise<string | null> {
       Constants.expoConfig?.extra?.eas?.projectId ??
       Constants.easConfig?.projectId;
 
-    // Prefer native device token when available; fall back to Expo push token.
-    try {
-      const deviceToken = await Notifications.getDevicePushTokenAsync();
-      if (deviceToken?.data && typeof deviceToken.data === 'string') {
-        return deviceToken.data;
-      }
-    } catch {
-      // Native token unavailable in some environments — try Expo token next.
-    }
-
+    // Expo tokens work on both iOS (APNs) and Android (FCM). Native APNs
+    // device tokens cannot be sent through Firebase Admin messaging.
     const tokenResponse = await Notifications.getExpoPushTokenAsync(
       projectId ? { projectId } : undefined,
     );
@@ -112,34 +108,46 @@ export function usePushNotifications(enabled: boolean) {
 
       foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
         const data = notification.request.content.data as Record<string, string> | undefined;
+        const unpublished = data?.action === 'unpublished';
+
         if (data?.type === 'announcement') {
-          const title =
-            notification.request.content.title ||
-            notification.request.content.body ||
-            'New announcement';
           const id = data.announcementId ? Number(data.announcementId) : 0;
-          setAnnouncementToast({
-            title: String(notification.request.content.body || title),
-            id,
-            message: String(title),
-          });
+          if (!unpublished) {
+            const title =
+              notification.request.content.title ||
+              notification.request.content.body ||
+              'New announcement';
+            setAnnouncementToast({
+              title: String(notification.request.content.body || title),
+              id,
+              message: String(title),
+            });
+          }
           queryClient.invalidateQueries({ queryKey: ['announcements'] });
           queryClient.invalidateQueries({ queryKey: ['announcement'] });
+          if (unpublished && id) {
+            queryClient.removeQueries({ queryKey: ['announcement', id] });
+          }
         }
 
         if (data?.type === 'event') {
-          const title =
-            notification.request.content.title ||
-            notification.request.content.body ||
-            'New Club Event';
           const id = data.eventId ? Number(data.eventId) : 0;
-          setEventToast({
-            title: String(notification.request.content.body || title),
-            id,
-            message: String(title),
-          });
+          if (!unpublished) {
+            const title =
+              notification.request.content.title ||
+              notification.request.content.body ||
+              'New Club Event';
+            setEventToast({
+              title: String(notification.request.content.body || title),
+              id,
+              message: String(title),
+            });
+          }
           queryClient.invalidateQueries({ queryKey: ['events'] });
           queryClient.invalidateQueries({ queryKey: ['event'] });
+          if (unpublished && id) {
+            queryClient.removeQueries({ queryKey: ['event', id] });
+          }
         }
       });
 

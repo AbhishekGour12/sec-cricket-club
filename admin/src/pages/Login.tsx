@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, KeyRound, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { getApiUrl } from '../lib/api';
 
@@ -25,6 +25,13 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Forgot Password modal state
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('sportsentertainmentclub9@gmail.com');
+  const [isResetLoading, setIsResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,8 +64,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       onLoginSuccess(token, user);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
-      // eslint-disable-next-line no-console
-      console.error('Email authentication failure:', err);
       let errMsg = err.response?.data?.message || err.message || 'Invalid email or password';
       if (err.code === 'ECONNABORTED') {
         errMsg = 'Login timed out. Is the backend running on port 5000?';
@@ -68,6 +73,38 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       setError(errMsg);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRequestReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsResetLoading(true);
+    setResetError(null);
+    setResetMessage(null);
+
+    const targetEmail = resetEmail.trim() || 'sportsentertainmentclub9@gmail.com';
+
+    try {
+      const apiURL = getApiUrl();
+      const response = await axios.post(
+        `${apiURL}/admin/auth/request-password-reset`,
+        { email: targetEmail },
+        { timeout: 20000 }
+      );
+
+      setResetMessage(
+        response.data?.message ||
+          `Password reset link sent to admin email (${targetEmail}). Please check inbox.`
+      );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      const errMsg =
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to request password reset. Please try again.';
+      setResetError(errMsg);
+    } finally {
+      setIsResetLoading(false);
     }
   };
 
@@ -122,7 +159,21 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
           {/* Password input field */}
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Password</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Password</label>
+              <button
+                type="button"
+                onClick={() => {
+                  setResetEmail(email || 'sportsentertainmentclub9@gmail.com');
+                  setResetMessage(null);
+                  setResetError(null);
+                  setIsResetModalOpen(true);
+                }}
+                className="text-xs font-semibold text-[#C41230] hover:text-[#E02447] transition-colors focus:outline-none"
+              >
+                Forgot Password?
+              </button>
+            </div>
             <div className="relative flex items-center">
               <Lock className="absolute left-4 text-slate-400" size={18} />
               <input
@@ -172,6 +223,83 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           </div>
         )}
       </div>
+
+      {/* Reset Password Modal */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-[#1A2744] border border-[#243260] rounded-3xl p-6 max-w-md w-full shadow-2xl relative">
+            <button
+              onClick={() => setIsResetModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-[#C41230]/10 border border-[#C41230]/30 flex items-center justify-center text-[#C41230]">
+                <KeyRound size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white uppercase tracking-tight">Reset Password</h3>
+                <p className="text-xs text-slate-400">Authenticate with registered admin email</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleRequestReset} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                  Admin Email Address
+                </label>
+                <div className="relative flex items-center">
+                  <Mail className="absolute left-4 text-slate-400" size={18} />
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="sportsentertainmentclub9@gmail.com"
+                    required
+                    className="w-full py-3 pl-12 pr-4 bg-[#111B30] border border-[#243260] text-white rounded-xl placeholder-slate-500 focus:outline-none focus:border-[#C41230] text-sm"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed mt-1">
+                  A secure, encrypted link will be sent to the configured admin email (<span className="text-slate-200 font-mono">sportsentertainmentclub9@gmail.com</span>).
+                </p>
+              </div>
+
+              {resetMessage && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-medium px-4 py-3 rounded-xl flex items-start space-x-2">
+                  <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
+                  <span>{resetMessage}</span>
+                </div>
+              )}
+
+              {resetError && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-medium px-4 py-3 rounded-xl flex items-start space-x-2">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                  <span>{resetError}</span>
+                </div>
+              )}
+
+              <div className="flex space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsResetModalOpen(false)}
+                  className="w-1/2 py-3 bg-[#111B30] hover:bg-[#15223D] border border-[#243260] text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResetLoading}
+                  className="w-1/2 py-3 bg-[#C41230] hover:bg-[#9E0E27] text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-[#C41230]/30 transition-all disabled:opacity-50"
+                >
+                  {isResetLoading ? 'Sending...' : 'Send Link'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Footer Branding */}
       <div className="mt-8 text-center text-xs text-slate-400 font-bold uppercase tracking-widest relative z-10">

@@ -12,6 +12,19 @@ const router = Router();
 router.post('/login', AuthController.loginWithCredentials);
 
 /**
+ * Route to request password reset email (Public)
+ * POST /api/admin/auth/request-password-reset
+ */
+router.post('/request-password-reset', AuthController.requestPasswordReset);
+
+/**
+ * Route to reset password with encrypted token (Public)
+ * POST /api/admin/auth/reset-password
+ */
+router.post('/reset-password', AuthController.resetPassword);
+
+
+/**
  * Route to get current logged-in administrator details (JWT Protected)
  * GET /api/admin/auth/me
  */

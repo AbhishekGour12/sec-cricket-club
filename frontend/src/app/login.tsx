@@ -12,7 +12,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Typography, Spacing, Radius, Glass, DarkSurface } from '@/theme';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as WebBrowser from 'expo-web-browser';
+import { GoogleAuthProvider, OAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth as firebaseAuth } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -27,29 +29,42 @@ const IOS_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ||
   '837780082237-gmj2oqqtv9ek1a4h1pnrnpfjvr59ktnj.apps.googleusercontent.com';
 
+const PRIVACY_POLICY_URL =
+  process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL || 'https://sec-cricket-club.onrender.com/privacy';
+const TERMS_URL =
+  process.env.EXPO_PUBLIC_TERMS_URL || 'https://sec-cricket-club.onrender.com/terms';
+
 GoogleSignin.configure({
   webClientId: WEB_CLIENT_ID,
   iosClientId: IOS_CLIENT_ID,
-  offlineAccess: true,
+  offlineAccess: false,
 });
+
+function yieldToPaint() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      setTimeout(resolve, 0);
+    });
+  });
+}
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, isLoading, error } = useAuth();
+  const { login, error } = useAuth();
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const handleGoogleLogin = async () => {
+    if (isSigningIn) return;
     setLoginError(null);
+    setIsSigningIn(true);
+    // Let the spinner paint before native Google SDK work starts.
+    await yieldToPaint();
+
     try {
       // Play Services check is Android-only; calling it on iOS can throw.
       if (Platform.OS === 'android') {
-        await GoogleSignin.hasPlayServices();
-      }
-
-      try {
-        await GoogleSignin.signOut();
-      } catch {
-        // Ignore if no active Google session existed
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       }
 
       const signInResult = await GoogleSignin.signIn();
@@ -78,7 +93,62 @@ export default function LoginScreen() {
       } else {
         setLoginError(message || 'Failed to authenticate with Google. Please try again.');
       }
+    } finally {
+      setIsSigningIn(false);
     }
+  };
+
+  const handleAppleLogin = async () => {
+    if (isSigningIn) return;
+    setLoginError(null);
+    setIsSigningIn(true);
+    await yieldToPaint();
+
+    try {
+      const credentialResult = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credentialResult.identityToken) {
+        throw new Error('Apple Sign-In failed: No identity token returned.');
+      }
+
+      const provider = new OAuthProvider('apple.com');
+      const credential = provider.credential({
+        idToken: credentialResult.identityToken,
+      });
+
+      const firebaseUserCredential = await signInWithCredential(firebaseAuth, credential);
+      const firebaseIdToken = await firebaseUserCredential.user.getIdToken();
+      const userRes = await login(firebaseIdToken);
+
+      if (userRes && !userRes.is_profile_completed) {
+        router.replace('/profile-completion');
+      } else {
+        router.replace('/(tabs)/home');
+      }
+    } catch (err: unknown) {
+      if ((err as { code?: string })?.code === 'ERR_REQUEST_CANCELED') {
+        setLoginError('Apple Sign-In was cancelled.');
+      } else {
+        const message = err instanceof Error ? err.message : 'Failed to authenticate with Apple.';
+        console.error('Apple Auth Login failed:', err);
+        setLoginError(message || 'Failed to authenticate with Apple. Please try again.');
+      }
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const openPrivacyPolicy = () => {
+    WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL);
+  };
+
+  const openTermsOfService = () => {
+    WebBrowser.openBrowserAsync(TERMS_URL);
   };
 
   const handleDevBypass = async () => {
@@ -148,9 +218,21 @@ export default function LoginScreen() {
         {/* Bottom auth card */}
         <View style={styles.bottomSection}>
           <View style={styles.authCard}>
+            {Platform.OS === 'ios' && (
+              <View style={styles.appleButtonWrapper}>
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                  cornerRadius={27}
+                  style={styles.appleButton}
+                  onPress={handleAppleLogin}
+                />
+              </View>
+            )}
+
             <Pressable
               onPress={handleGoogleLogin}
-              disabled={isLoading}
+              disabled={isSigningIn}
               style={styles.googleButtonWrapper}
             >
               {({ pressed }) => (
@@ -160,10 +242,10 @@ export default function LoginScreen() {
                   end={{ x: 1, y: 1 }}
                   style={[
                     styles.googleButton,
-                    isLoading && styles.googleButtonDisabled,
+                    isSigningIn && styles.googleButtonDisabled,
                   ]}
                 >
-                  {isLoading ? (
+                  {isSigningIn ? (
                     <ActivityIndicator color="#FFFFFF" size="small" />
                   ) : (
                     <>
@@ -181,9 +263,26 @@ export default function LoginScreen() {
             )}
           </View>
 
+          <View style={styles.policyRow}>
+            <Pressable onPress={openPrivacyPolicy} hitSlop={8}>
+              <Text style={styles.policyLink}>Privacy Policy</Text>
+            </Pressable>
+            <Text style={styles.policyDot}>•</Text>
+            <Pressable onPress={openTermsOfService} hitSlop={8}>
+              <Text style={styles.policyLink}>Terms of Service</Text>
+            </Pressable>
+          </View>
+
           <Text style={styles.prestigeFooter}>PRESTIGE  •  COMMUNITY  •  LEGACY</Text>
         </View>
       </SafeAreaView>
+
+      {isSigningIn && (
+        <View style={styles.loadingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={styles.loadingOverlayText}>Signing in...</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -314,6 +413,14 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
     alignItems: 'center',
   },
+  appleButtonWrapper: {
+    width: '100%',
+    marginBottom: Spacing.md,
+  },
+  appleButton: {
+    width: '100%',
+    height: 54,
+  },
   googleButtonWrapper: {
     width: '100%',
   },
@@ -354,6 +461,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
   },
+  policyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  policyLink: {
+    fontFamily: Typography.caption.fontFamily,
+    color: DarkSurface.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  policyDot: {
+    color: DarkSurface.textMuted,
+    fontSize: 12,
+  },
   prestigeFooter: {
     fontFamily: Typography.caption.fontFamily,
     color: DarkSurface.textMuted,
@@ -362,6 +487,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     textTransform: 'uppercase',
-    marginTop: Spacing.lg,
+    marginTop: Spacing.md,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 20,
+  },
+  loadingOverlayText: {
+    fontFamily: Typography.caption.fontFamily,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+    letterSpacing: 1.4,
+    marginTop: Spacing.md,
+    textTransform: 'uppercase',
   },
 });

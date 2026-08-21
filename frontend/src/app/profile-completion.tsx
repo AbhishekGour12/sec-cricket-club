@@ -125,12 +125,14 @@ export default function ProfileCompletionScreen() {
             : user.business_images || [],
       });
 
-      const savedCards = (user.visiting_card || '')
-        .split(',')
-        .map((card) => card.trim())
-        .filter(Boolean);
-      setCardFront((current) => current || savedCards[0] || '');
-      setCardBack((current) => current || savedCards[1] || '');
+      queueMicrotask(() => {
+        const savedCards = (user.visiting_card || '')
+          .split(',')
+          .map((card) => card.trim())
+          .filter(Boolean);
+        setCardFront((current) => current || savedCards[0] || '');
+        setCardBack((current) => current || savedCards[1] || '');
+      });
 
       // Dynamically determine the initial step based on filled fields
       const hasStep1 = !!user.full_name && !!user.designation;

@@ -45,9 +45,12 @@ async function showLocalEventNotice(title: string, body: string, id: number) {
   }
 }
 
+const SYNC_INTERVAL_MS = 15_000;
+
 /**
  * Event sync for approved members.
- * One check on open / foreground; push handles updates while the app stays open.
+ * Polls while the app is active so unpublished events disappear promptly,
+ * including when a push notification cannot be delivered.
  */
 export function useEventRealtime(enabled: boolean) {
   const queryClient = useQueryClient();
@@ -61,9 +64,11 @@ export function useEventRealtime(enabled: boolean) {
   const setLatestToastRef = useRef(setLatestToast);
   const setSyncFingerprintRef = useRef(setSyncFingerprint);
 
-  queryClientRef.current = queryClient;
-  setLatestToastRef.current = setLatestToast;
-  setSyncFingerprintRef.current = setSyncFingerprint;
+  useEffect(() => {
+    queryClientRef.current = queryClient;
+    setLatestToastRef.current = setLatestToast;
+    setSyncFingerprintRef.current = setSyncFingerprint;
+  }, [queryClient, setLatestToast, setSyncFingerprint]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -141,16 +146,18 @@ export function useEventRealtime(enabled: boolean) {
       }
     };
 
-    // Initial open + whenever app returns to foreground (no continuous timer).
+    // Check immediately, on foreground, and while the member is active.
     void poll();
     const onAppState = (state: AppStateStatus) => {
       if (state === 'active') void poll();
     };
     const sub = AppState.addEventListener('change', onAppState);
+    const interval = setInterval(() => void poll(), SYNC_INTERVAL_MS);
 
     return () => {
       cancelled = true;
       sub.remove();
+      clearInterval(interval);
     };
   }, [enabled]);
 }

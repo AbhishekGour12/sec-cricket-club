@@ -1,6 +1,7 @@
 import React from 'react';
 import { ColorValue } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Colors } from './colors';
 
 // Define standardized icon mappings to ensure consistent Material Round style
@@ -46,7 +47,11 @@ export const IconMap = {
   gallery: 'photo-library',
 } as const;
 
-export type IconName = keyof typeof IconMap;
+const BrandIconMap = {
+  whatsapp: 'whatsapp',
+} as const;
+
+export type IconName = keyof typeof IconMap | keyof typeof BrandIconMap;
 
 interface IconProps {
   name: IconName;
@@ -61,7 +66,18 @@ export const ThemeIcon: React.FC<IconProps> = ({
   color = Colors.primary,
   style,
 }) => {
-  const glyphName = IconMap[name] || 'help-outline';
+  if (name in BrandIconMap) {
+    return (
+      <FontAwesome
+        name={BrandIconMap[name as keyof typeof BrandIconMap]}
+        size={size}
+        color={color}
+        style={style}
+      />
+    );
+  }
+
+  const glyphName = IconMap[name as keyof typeof IconMap] || 'help-outline';
   return (
     <MaterialIcons
       name={glyphName as any}
@@ -73,3 +89,4 @@ export const ThemeIcon: React.FC<IconProps> = ({
 };
 
 export default ThemeIcon;
+

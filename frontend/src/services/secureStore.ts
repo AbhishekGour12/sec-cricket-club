@@ -1,7 +1,12 @@
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 const JWT_KEY = 'sec_cricket_jwt_token';
 const USER_DATA_KEY = 'sec_cricket_user_data';
+const secureOptions =
+  Platform.OS === 'ios'
+    ? { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY }
+    : undefined;
 
 export const SecureStorageService = {
   /**
@@ -9,7 +14,7 @@ export const SecureStorageService = {
    */
   setToken: async (token: string): Promise<void> => {
     try {
-      await SecureStore.setItemAsync(JWT_KEY, token);
+      await SecureStore.setItemAsync(JWT_KEY, token, secureOptions);
     } catch (error) {
       console.error('SecureStore: Failed to save JWT token:', error);
     }
@@ -44,7 +49,7 @@ export const SecureStorageService = {
   setUserData: async (userData: any): Promise<void> => {
     try {
       const dataStr = JSON.stringify(userData);
-      await SecureStore.setItemAsync(USER_DATA_KEY, dataStr);
+      await SecureStore.setItemAsync(USER_DATA_KEY, dataStr, secureOptions);
     } catch (error) {
       console.error('SecureStore: Failed to save user data:', error);
     }

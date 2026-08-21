@@ -90,17 +90,26 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const config = error.config as { _retryCount?: number } | undefined;
-    if (config && isRetryableNetworkError(error)) {
-      config._retryCount = (config._retryCount || 0) + 1;
-      if (config._retryCount <= MAX_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, 4000 * config._retryCount));
-        return api.request(config);
+    const retryConfig = error.config as (typeof error.config & { _retryCount?: number }) | undefined;
+    if (retryConfig && isRetryableNetworkError(error)) {
+      const currentRetry = retryConfig._retryCount || 0;
+      retryConfig._retryCount = currentRetry + 1;
+      if (retryConfig._retryCount <= MAX_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, 4000 * (retryConfig._retryCount || 1)));
+        return api.request(retryConfig);
       }
     }
 
     if (error.response && error.response.status === 401) {
       await SecureStorageService.clearAuthSession();
+      const { useAuthStore } = await import('../store/authStore');
+      useAuthStore.setState({
+        user: null,
+        jwt: null,
+        isAuthenticated: false,
+        error: null,
+        isLoading: false,
+      });
     }
 
     if (isRetryableNetworkError(error)) {
