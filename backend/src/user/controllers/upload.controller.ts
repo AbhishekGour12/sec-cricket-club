@@ -72,49 +72,19 @@ export class UploadController {
         return;
       }
 
-      // Analyze/validate image properties using sharp
       const validationErrors: string[] = [];
 
       for (const file of files) {
-        const filePath = file.path;
         try {
-          const image = sharp(filePath);
-          const metadata = await image.metadata();
-          const stats = await image.stats();
-
+          const metadata = await sharp(file.path).metadata();
           const width = metadata.width || 0;
           const height = metadata.height || 0;
-
-          // 1. Resolution / Quality Check (Text Must Be Clear)
           const minDimension = Math.min(width, height);
           const maxDimension = Math.max(width, height);
+
           if (maxDimension < 600 || minDimension < 400) {
             validationErrors.push(
               `Resolution of ${file.originalname} is too low (${width}x${height}). It must be at least 600x400 pixels so the text is clear and readable.`
-            );
-          }
-
-          // 2. Lighting Check (Good Lighting)
-          const rMean = stats.channels[0]?.mean || 0;
-          const gMean = stats.channels[1]?.mean || 0;
-          const bMean = stats.channels[2]?.mean || 0;
-          const avgBrightness = (rMean + gMean + bMean) / 3;
-
-          if (avgBrightness < 50) {
-            validationErrors.push(
-              `Good Lighting check failed for ${file.originalname}: The image is too dark. Please place the card in bright, even light.`
-            );
-          } else if (avgBrightness > 225) {
-            validationErrors.push(
-              `Good Lighting check failed for ${file.originalname}: The image is too bright or has glare. Avoid harsh reflections.`
-            );
-          }
-
-          // 3. Aspect Ratio Check (Fill the Frame)
-          const ratio = maxDimension / minDimension;
-          if (ratio > 2.5) {
-            validationErrors.push(
-              `Aspect Ratio check failed for ${file.originalname}: The image is too stretched. Please align the card inside the box.`
             );
           }
         } catch (err) {

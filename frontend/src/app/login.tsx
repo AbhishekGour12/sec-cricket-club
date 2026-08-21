@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
+  InteractionManager,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -96,10 +97,11 @@ export default function LoginScreen() {
 
       console.log(`[PERF] ✅ TOTAL Google Login Flow completed in: ${(Date.now() - startMs) / 1000}s`);
 
-      // ⚠️ CRITICAL FABRIC FIX: Unmount loading overlay UI BEFORE navigating screens
-      // to avoid React Native Fabric SurfaceMountingManager view insertion crash
       setIsSigningIn(false);
       await yieldToPaint();
+      await new Promise<void>((resolve) => {
+        InteractionManager.runAfterInteractions(() => resolve());
+      });
 
       if (userRes && !userRes.is_profile_completed) {
         router.replace('/profile-completion');
@@ -148,6 +150,9 @@ export default function LoginScreen() {
 
       setIsSigningIn(false);
       await yieldToPaint();
+      await new Promise<void>((resolve) => {
+        InteractionManager.runAfterInteractions(() => resolve());
+      });
 
       if (userRes && !userRes.is_profile_completed) {
         router.replace('/profile-completion');
@@ -299,13 +304,12 @@ export default function LoginScreen() {
         </View>
       </SafeAreaView>
 
-      <View
-        style={[styles.loadingOverlay, !isSigningIn && { display: 'none' }]}
-        pointerEvents={isSigningIn ? 'auto' : 'none'}
-      >
-        <ActivityIndicator size="large" color="#FFFFFF" />
-        <Text style={styles.loadingOverlayText}>Signing in...</Text>
-      </View>
+      {isSigningIn ? (
+        <View style={styles.loadingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={styles.loadingOverlayText}>Signing in...</Text>
+        </View>
+      ) : null}
     </View>
   );
 }

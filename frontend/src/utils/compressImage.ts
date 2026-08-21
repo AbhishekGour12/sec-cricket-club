@@ -1,6 +1,6 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 
-const MAX_EDGE = 1600;
+const MAX_EDGE = 1280;
 const COMPRESS_QUALITY = 0.7;
 
 /**
@@ -26,6 +26,6 @@ export async function compressImageForUpload(
   return {
     uri: result.uri,
     mimeType: 'image/jpeg',
-    fileName: `flyer-${Date.now()}.jpg`,
+    fileName: `upload-${Date.now()}.jpg`,
   };
 }

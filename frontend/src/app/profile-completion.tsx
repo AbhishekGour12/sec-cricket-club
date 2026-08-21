@@ -28,6 +28,7 @@ import {
   mergeProfileCompletionFields,
 } from '../utils/profileCompletion';
 import { getMediaUrl } from '../utils/mediaUrl';
+import { compressImageForUpload } from '../utils/compressImage';
 import { StatusBar } from 'expo-status-bar';
 
 const DESIGNATIONS = [
@@ -171,15 +172,13 @@ export default function ProfileCompletionScreen() {
   ) => {
     setIsUploading(type);
     try {
+      const compressed = await compressImageForUpload(localUri, { maxEdge: 1280, quality: 0.7 });
       const formDataUpload = new FormData();
-      const filename = localUri.split('/').pop() || 'image.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const fileType = match ? `image/${match[1]}` : `image/jpeg`;
 
       formDataUpload.append(type === 'business-images' ? 'images' : 'image', {
-        uri: localUri,
-        name: filename,
-        type: fileType,
+        uri: compressed.uri,
+        name: compressed.fileName,
+        type: compressed.mimeType,
       } as any);
 
       // Pass useCamera flag to the backend
@@ -192,11 +191,7 @@ export default function ProfileCompletionScreen() {
           ? '/upload/visiting-card'
           : `/upload/${type}`;
 
-      const response = await api.post(endpoint, formDataUpload, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await api.post(endpoint, formDataUpload);
 
       return response.data;
     } catch (err: any) {

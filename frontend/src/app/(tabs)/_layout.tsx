@@ -52,7 +52,7 @@ export default function TabLayout() {
           options={{
             title: 'MEMBERS',
             tabBarIcon: ({ color }) => <MaterialIcons name="person" color={color} size={22} />,
-            href: isApproved ? undefined : null,
+            tabBarButton: isApproved ? undefined : () => null,
           }}
         />
         <Tabs.Screen
@@ -62,7 +62,7 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => (
               <MaterialIcons name="notifications" color={color} size={22} />
             ),
-            href: isApproved ? undefined : null,
+            tabBarButton: isApproved ? undefined : () => null,
           }}
         />
         <Tabs.Screen
@@ -72,7 +72,7 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => (
               <MaterialIcons name="emoji-events" color={color} size={22} />
             ),
-            href: isApproved ? undefined : null,
+            tabBarButton: isApproved ? undefined : () => null,
           }}
         />
         <Tabs.Screen

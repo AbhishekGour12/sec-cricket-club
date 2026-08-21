@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { AdminLayout } from '../layouts/AdminLayout';
 import { MemberEditModal, Achievement, PrivacySettings } from '../components/MemberEditModal';
+import { getAdminMediaUrl } from '../utils/mediaUrl';
 
 interface BusinessFlyer {
   id: number;
@@ -569,30 +570,11 @@ export const Members: React.FC = () => {
     }
   };
 
-  const getImageUrl = (path?: string) => {
-    const fallback = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100';
-    if (!path) return fallback;
-    const trimmedPath = String(path).trim();
-    if (!trimmedPath) return fallback;
-    const baseURL = apiURL.replace('/api', '');
-
-    const uploadsIndex = trimmedPath.indexOf('/uploads/');
-    if (uploadsIndex !== -1) {
-      const relativeUploadPath = trimmedPath.substring(uploadsIndex);
-      return baseURL ? `${baseURL}${relativeUploadPath}` : relativeUploadPath;
-    }
-
-    if (!trimmedPath.startsWith('http://') && !trimmedPath.startsWith('https://')) {
-      const cleanPath = trimmedPath.startsWith('/') ? trimmedPath : '/' + trimmedPath;
-      return `${baseURL}${cleanPath}`;
-    }
-
-    if (trimmedPath.startsWith('http://') && (window.location.protocol === 'https:' || baseURL.startsWith('https:'))) {
-      return trimmedPath.replace('http://', 'https://');
-    }
-
-    return trimmedPath;
-  };
+  const getImageUrl = (path?: string) =>
+    getAdminMediaUrl(
+      path,
+      'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100',
+    );
 
   const getVisitingCards = (visitingCardString?: string): string[] => {
     if (!visitingCardString) return [];

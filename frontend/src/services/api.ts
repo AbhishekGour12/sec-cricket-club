@@ -12,7 +12,6 @@ const getApiBaseUrl = (): string => {
     return envUrl.trim();
   }
 
-  // Dev fallback only if EXPO_PUBLIC_API_URL is missing
   if (__DEV__) {
     const hostUri =
       Constants.expoConfig?.hostUri ||
@@ -36,7 +35,12 @@ if (__DEV__) {
   console.log('[API Base URL]:', baseURL);
 }
 
-// VPS network requests timeout configuration (15s fast failover)
+const isFormDataBody = (data: unknown): boolean => {
+  if (!data || typeof data !== 'object') return false;
+  if (typeof FormData !== 'undefined' && data instanceof FormData) return true;
+  return Array.isArray((data as { _parts?: unknown })._parts);
+};
+
 // eslint-disable-next-line import/no-named-as-default-member
 export const api = axios.create({
   baseURL,
@@ -60,12 +64,27 @@ const isRetryableNetworkError = (error: unknown): boolean => {
   );
 };
 
-// Request Interceptor: Attach backend JWT token
+const shouldRetryRequest = (config: { method?: string; url?: string; data?: unknown } | undefined): boolean => {
+  if (!config) return false;
+  const method = (config.method || 'get').toLowerCase();
+  if (method !== 'get') return false;
+  const url = String(config.url || '');
+  if (url.includes('/auth/google')) return false;
+  if (isFormDataBody(config.data)) return false;
+  return true;
+};
+
 api.interceptors.request.use(
   async (config) => {
     const token = await SecureStorageService.getToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    if (isFormDataBody(config.data)) {
+      config.timeout = Math.max(config.timeout || 0, 60000);
+      if (config.headers) {
+        delete (config.headers as { 'Content-Type'?: string })['Content-Type'];
+      }
     }
     return config;
   },
@@ -74,16 +93,14 @@ api.interceptors.request.use(
   },
 );
 
-// Response Interceptor: retry cold-start failures; clear session on 401
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const retryConfig = error.config as (typeof error.config & { _retryCount?: number }) | undefined;
-    if (retryConfig && isRetryableNetworkError(error)) {
+    if (retryConfig && isRetryableNetworkError(error) && shouldRetryRequest(retryConfig)) {
       const currentRetry = retryConfig._retryCount || 0;
       retryConfig._retryCount = currentRetry + 1;
       if (retryConfig._retryCount <= MAX_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, 4000 * (retryConfig._retryCount || 1)));
         return api.request(retryConfig);
       }
     }

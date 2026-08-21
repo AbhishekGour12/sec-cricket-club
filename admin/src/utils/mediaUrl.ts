@@ -2,9 +2,8 @@ import { getApiUrl } from '../lib/api';
 
 /**
  * Builds an absolute media URL for admin panel.
- * Always resolves /uploads/ paths to the current API server URL from VITE_API_URL,
- * upgrades HTTP to HTTPS if the admin panel is served over HTTPS,
- * and rejects plain non-path text strings (like "fghjk").
+ * Resolves /uploads/ paths through /api/uploads so Nginx SPA fallback
+ * (location /) cannot swallow image requests.
  */
 export const getAdminMediaUrl = (imagePath?: string | null, fallback = ''): string => {
   if (!imagePath) return fallback;
@@ -13,18 +12,18 @@ export const getAdminMediaUrl = (imagePath?: string | null, fallback = ''): stri
 
   if (trimmed.startsWith('data:')) return trimmed;
 
-  // Active base server URL from VITE_API_URL
   const apiUrl = getApiUrl();
   const serverUrl = apiUrl.replace(/\/api\/?$/, '');
 
-  // If path contains /uploads/, extract the relative upload path and attach to serverUrl
   const uploadsIndex = trimmed.indexOf('/uploads/');
   if (uploadsIndex !== -1) {
     const relativeUploadPath = trimmed.substring(uploadsIndex);
-    return serverUrl ? `${serverUrl}${relativeUploadPath}` : relativeUploadPath;
+    const apiUploadsPath = relativeUploadPath.startsWith('/api/')
+      ? relativeUploadPath
+      : `/api${relativeUploadPath}`;
+    return serverUrl ? `${serverUrl}${apiUploadsPath}` : apiUploadsPath;
   }
 
-  // If full HTTP/HTTPS URL
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     if (trimmed.startsWith('http://') && (window.location.protocol === 'https:' || serverUrl.startsWith('https:'))) {
       return trimmed.replace('http://', 'https://');
@@ -32,6 +31,5 @@ export const getAdminMediaUrl = (imagePath?: string | null, fallback = ''): stri
     return trimmed;
   }
 
-  // Reject random non-path plain strings (e.g. "fghjk")
   return fallback;
 };

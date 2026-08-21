@@ -1098,9 +1098,6 @@ export const Events: React.FC = () => {
                           src={getImageUrl(form.event_image)}
                           alt="Event preview"
                           className="w-full h-32 object-cover"
-                          onError={() => {
-                            setForm((prev) => ({ ...prev, event_image: '' }));
-                          }}
                         />
                         <button
                           type="button"

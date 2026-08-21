@@ -68,7 +68,7 @@ export const AuthApi = {
    * Log in or register using Firebase ID token.
    */
   loginWithGoogle: async (idToken: string): Promise<AuthResponse> => {
-    const response = await api.post<AuthResponse>('/auth/google', { idToken });
+    const response = await api.post<AuthResponse>('/auth/google', { idToken }, { timeout: 20000 });
     return response.data;
   },
 

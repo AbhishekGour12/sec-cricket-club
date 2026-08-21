@@ -843,9 +843,6 @@ export const Announcements: React.FC = () => {
                           src={getImageUrl(form.cover_image)}
                           alt="Cover preview"
                           className="w-full h-32 object-cover"
-                          onError={() => {
-                            setForm((prev) => ({ ...prev, cover_image: '' }));
-                          }}
                         />
                         <button
                           type="button"

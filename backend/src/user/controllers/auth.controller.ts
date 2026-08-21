@@ -7,7 +7,7 @@ import { generateToken } from '../../utils/jwt';
 import { logger } from '../../utils/logger';
 import { serializeSelf } from '../serializers/user.serializer';
 
-import jwt from 'jsonwebtoken';
+import { verifyGoogleIdToken } from '../../utils/googleToken';
 
 export class AuthController {
   /**
@@ -34,40 +34,29 @@ export class AuthController {
       let name = '';
       let picture = '';
 
-      if (!auth) {
-        if (process.env.NODE_ENV === 'production') {
-          res.status(503).json({
-            error: 'Configuration Error',
-            message: 'Google Sign-In is temporarily unavailable.',
-          });
-          return;
-        }
-        if (idToken === 'mock-admin-token' || idToken === 'mock-member-token') {
-          uid = idToken === 'mock-admin-token' ? 'mock-admin-uid-123' : 'mock-member-uid-123';
-          email = idToken === 'mock-admin-token' ? 'admin-bypass@sec.com' : 'member@sec.com';
-          name = idToken === 'mock-admin-token' ? 'Admin Bypass' : 'Member User';
-          picture = '';
-        } else {
-          res.status(500).json({
-            error: 'Configuration Error',
-            message: 'Firebase Admin is not configured. Google Sign-In verification is unavailable. For testing, please sign in with "mock-member-token".',
-          });
-          return;
-        }
+      if (process.env.NODE_ENV !== 'production' && (idToken === 'mock-admin-token' || idToken === 'mock-member-token')) {
+        uid = idToken === 'mock-admin-token' ? 'mock-admin-uid-123' : 'mock-member-uid-123';
+        email = idToken === 'mock-admin-token' ? 'admin-bypass@sec.com' : 'member@sec.com';
+        name = idToken === 'mock-admin-token' ? 'Admin Bypass' : 'Member User';
+        picture = '';
       } else {
         const t1 = Date.now();
         logger.info('[PERF] Inspecting ID Token...');
-        
-        // Fast Path: Synchronously decode JWT claims (0ms) for Google OpenID Tokens
-        const decoded: any = jwt.decode(idToken);
-        if (decoded && decoded.email && (decoded.iss?.includes('accounts.google.com') || decoded.aud)) {
-          logger.info(`[PERF] 1. Direct Google OAuth ID Token decoded in ${Date.now() - t1}ms`);
-          uid = decoded.sub || decoded.user_id || decoded.uid || decoded.email;
-          email = decoded.email;
-          name = decoded.name || '';
-          picture = decoded.picture || '';
-        } else {
-          // Slow Path: Network call to verify Firebase Client SDK tokens
+
+        try {
+          const googleIdentity = await verifyGoogleIdToken(idToken);
+          if (googleIdentity) {
+            logger.info(`[PERF] 1. Google JWKS verify took: ${Date.now() - t1}ms`);
+            uid = googleIdentity.uid;
+            email = googleIdentity.email;
+            name = googleIdentity.name;
+            picture = googleIdentity.picture;
+          }
+        } catch (googleVerifyError: any) {
+          logger.warn('Google JWKS verification failed, trying Firebase:', googleVerifyError?.message);
+        }
+
+        if (!email && auth) {
           try {
             const decodedToken = await auth.verifyIdToken(idToken);
             logger.info(`[PERF] 1. Firebase verifyIdToken took: ${Date.now() - t1}ms`);

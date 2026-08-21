@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { AdminLayout, AdminNotification } from '../layouts/AdminLayout';
 import { useNavigate } from 'react-router-dom';
+import { getAdminMediaUrl } from '../utils/mediaUrl';
 
 export const Notifications: React.FC = () => {
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
@@ -19,7 +20,7 @@ export const Notifications: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  const apiURL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api';
+  const apiURL = import.meta.env.VITE_API_URL || 'https://sec-api.duckdns.org/api';
   const token = localStorage.getItem('admin_jwt');
 
   const fetchNotifications = async () => {
@@ -77,29 +78,7 @@ export const Notifications: React.FC = () => {
     return matchType && matchRead;
   });
 
-  const getImageUrl = (imagePath?: string) => {
-    if (!imagePath) return undefined;
-    const trimmedPath = String(imagePath).trim();
-    if (!trimmedPath) return undefined;
-    const baseURL = apiURL.replace('/api', '');
-
-    const uploadsIndex = trimmedPath.indexOf('/uploads/');
-    if (uploadsIndex !== -1) {
-      const relativeUploadPath = trimmedPath.substring(uploadsIndex);
-      return baseURL ? `${baseURL}${relativeUploadPath}` : relativeUploadPath;
-    }
-
-    if (!trimmedPath.startsWith('http://') && !trimmedPath.startsWith('https://')) {
-      const cleanPath = trimmedPath.startsWith('/') ? trimmedPath : '/' + trimmedPath;
-      return `${baseURL}${cleanPath}`;
-    }
-
-    if (trimmedPath.startsWith('http://') && (window.location.protocol === 'https:' || baseURL.startsWith('https:'))) {
-      return trimmedPath.replace('http://', 'https://');
-    }
-
-    return trimmedPath;
-  };
+  const getImageUrl = (imagePath?: string) => getAdminMediaUrl(imagePath, '') || undefined;
 
   return (
     <AdminLayout>
