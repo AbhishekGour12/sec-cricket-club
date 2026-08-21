@@ -240,10 +240,24 @@ export const Events: React.FC = () => {
     if (!path) return '';
     const trimmedPath = String(path).trim();
     if (!trimmedPath) return '';
-    if (trimmedPath.startsWith('http')) return trimmedPath;
     const baseURL = apiURL.replace('/api', '');
-    const cleanPath = trimmedPath.startsWith('/') ? trimmedPath : '/' + trimmedPath;
-    return `${baseURL}${cleanPath}`;
+
+    const uploadsIndex = trimmedPath.indexOf('/uploads/');
+    if (uploadsIndex !== -1) {
+      const relativeUploadPath = trimmedPath.substring(uploadsIndex);
+      return baseURL ? `${baseURL}${relativeUploadPath}` : relativeUploadPath;
+    }
+
+    if (!trimmedPath.startsWith('http://') && !trimmedPath.startsWith('https://')) {
+      const cleanPath = trimmedPath.startsWith('/') ? trimmedPath : '/' + trimmedPath;
+      return `${baseURL}${cleanPath}`;
+    }
+
+    if (trimmedPath.startsWith('http://') && (window.location.protocol === 'https:' || baseURL.startsWith('https:'))) {
+      return trimmedPath.replace('http://', 'https://');
+    }
+
+    return trimmedPath;
   };
 
   const fetchEvents = useCallback(async () => {

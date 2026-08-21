@@ -79,9 +79,26 @@ export const Notifications: React.FC = () => {
 
   const getImageUrl = (imagePath?: string) => {
     if (!imagePath) return undefined;
-    if (imagePath.startsWith('http')) return imagePath;
+    const trimmedPath = String(imagePath).trim();
+    if (!trimmedPath) return undefined;
     const baseURL = apiURL.replace('/api', '');
-    return `${baseURL}${imagePath.startsWith('/') ? imagePath : '/' + imagePath}`;
+
+    const uploadsIndex = trimmedPath.indexOf('/uploads/');
+    if (uploadsIndex !== -1) {
+      const relativeUploadPath = trimmedPath.substring(uploadsIndex);
+      return baseURL ? `${baseURL}${relativeUploadPath}` : relativeUploadPath;
+    }
+
+    if (!trimmedPath.startsWith('http://') && !trimmedPath.startsWith('https://')) {
+      const cleanPath = trimmedPath.startsWith('/') ? trimmedPath : '/' + trimmedPath;
+      return `${baseURL}${cleanPath}`;
+    }
+
+    if (trimmedPath.startsWith('http://') && (window.location.protocol === 'https:' || baseURL.startsWith('https:'))) {
+      return trimmedPath.replace('http://', 'https://');
+    }
+
+    return trimmedPath;
   };
 
   return (
