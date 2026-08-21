@@ -4,7 +4,15 @@ import Constants from 'expo-constants';
 import { SecureStorageService } from './secureStore';
 
 const getApiBaseUrl = (): string => {
-  // Dev only: derive LAN IP from Metro so physical devices can hit the local API.
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl && envUrl.trim().length > 0) {
+    if (__DEV__ && Platform.OS === 'android' && envUrl.includes('localhost')) {
+      return envUrl.replace('localhost', '10.0.2.2');
+    }
+    return envUrl.trim();
+  }
+
+  // Dev fallback only if EXPO_PUBLIC_API_URL is missing
   if (__DEV__) {
     const hostUri =
       Constants.expoConfig?.hostUri ||
@@ -14,33 +22,13 @@ const getApiBaseUrl = (): string => {
     if (hostUri) {
       const hostIp = hostUri.split(':')[0];
       if (hostIp && hostIp !== 'localhost' && hostIp !== '127.0.0.1') {
-        return `http://${hostIp}:5000/api`;
+        return `http://${hostIp}:5001/api`;
       }
     }
-
-    let envUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
-    if (Platform.OS === 'android' && envUrl.includes('localhost')) {
-      envUrl = envUrl.replace('localhost', '10.0.2.2');
-    }
-    return envUrl;
+    return 'http://10.0.2.2:5001/api';
   }
 
-  // Release / App Store: require HTTPS API — App Transport Security blocks cleartext.
-  const productionUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (!productionUrl) {
-    console.error(
-      '[API] EXPO_PUBLIC_API_URL is required in production builds. Set it in EAS secrets.',
-    );
-    return 'https://api.invalid/api';
-  }
-
-  if (productionUrl.startsWith('http://')) {
-    console.warn(
-      '[API] Production API URL uses HTTP. App Store builds should use HTTPS for ATS compliance.',
-    );
-  }
-
-  return productionUrl;
+  return 'https://api.invalid/api';
 };
 
 const baseURL = getApiBaseUrl();
@@ -48,7 +36,7 @@ if (__DEV__) {
   console.log('[API Base URL]:', baseURL);
 }
 
-// Render free tier can take 30–60s to wake; 10s was causing "Network Error" on first login.
+// Render / VPS network requests timeout configuration
 // eslint-disable-next-line import/no-named-as-default-member
 export const api = axios.create({
   baseURL,
@@ -115,7 +103,7 @@ api.interceptors.response.use(
     if (isRetryableNetworkError(error)) {
       return Promise.reject(
         new Error(
-          'Cannot reach the server. Open https://sec-cricket-club.onrender.com/api/health in the phone browser, wait until it loads, then try login again.',
+          `Cannot reach the server (${baseURL}). Please check your connection or backend server status.`,
         ),
       );
     }
