@@ -47,15 +47,20 @@ const formatTime = (value?: string | null) => {
   return `${hour}:${minute} ${period}`;
 };
 
+import { useToast } from '@/components/Toast';
+
 const TIER_ORDER: SponsorTier[] = ['Title Sponsor', 'Co-Sponsor', 'Associate Sponsor'];
 
-async function openExternalUrl(url: string) {
+async function openExternalUrl(url: string, showErrorToast?: (msg: string) => void) {
   const normalized =
     url.startsWith('http://') || url.startsWith('https://') ? url : `https://${url}`;
   if (!/^https?:\/\//i.test(normalized)) return;
   const supported = await Linking.canOpenURL(normalized);
   if (supported) Linking.openURL(normalized);
-  else Alert.alert('Unable to open link');
+  else {
+    if (showErrorToast) showErrorToast('Could not open link.');
+    else Alert.alert('Unable to open link');
+  }
 }
 
 export default function EventDetailScreen() {

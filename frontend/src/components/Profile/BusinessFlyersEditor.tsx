@@ -24,6 +24,7 @@ import { useBusinessFlyerStore } from '../../store/businessFlyerStore';
 import { compressImageForUpload } from '../../utils/compressImage';
 import { getMediaUrl } from '../../utils/mediaUrl';
 import { ImageViewer } from './ImageViewer';
+import { useToast } from '@/components/Toast';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -33,6 +34,7 @@ interface BusinessFlyersEditorProps {
 }
 
 export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorProps) {
+  const toast = useToast();
   const {
     flyers,
     max,
@@ -58,13 +60,13 @@ export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorPr
     if (source === 'camera') {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Camera access is required to take flyer photos.');
+        toast.showError('Permission Needed', 'Camera access is required to take flyer photos.');
         return false;
       }
     } else {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Photo library access is required to upload flyers.');
+        toast.showError('Permission Needed', 'Photo library access is required to upload flyers.');
         return false;
       }
     }
@@ -73,7 +75,7 @@ export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorPr
 
   const pickAndUpload = async (source: 'camera' | 'gallery', replaceId?: number) => {
     if (!replaceId && flyers.length >= max) {
-      Alert.alert('Limit reached', `You can upload a maximum of ${max} business flyers.`);
+      toast.showWarning('Limit Reached', `You can upload a maximum of ${max} business flyers.`);
       return;
     }
 
@@ -96,7 +98,7 @@ export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorPr
 
     const asset = result.assets[0];
     if (asset.fileSize && asset.fileSize > MAX_BYTES) {
-      Alert.alert('File too large', 'Each image must be 5 MB or smaller.');
+      toast.showError('File Too Large', 'Each image must be 5 MB or smaller.');
       return;
     }
 
@@ -105,7 +107,7 @@ export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorPr
       mime &&
       !['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(mime)
     ) {
-      Alert.alert('Unsupported format', 'Only JPG, JPEG, PNG, and WEBP images are allowed.');
+      toast.showError('Unsupported Format', 'Only JPG, JPEG, PNG, and WEBP images are allowed.');
       return;
     }
 
@@ -119,13 +121,14 @@ export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorPr
         replaceId,
       });
       await refetch();
+      toast.showSuccess(replaceId ? 'Flyer Replaced' : 'Flyer Uploaded');
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } }; message?: string };
       const message =
         axiosErr?.response?.data?.message ||
         axiosErr?.message ||
         'Could not upload the flyer. Please try again.';
-      Alert.alert('Upload failed', message);
+      toast.showError('Upload Failed', message);
     } finally {
       setBusyId(null);
     }
@@ -167,8 +170,9 @@ export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorPr
             setBusyId(id);
             await deleteFlyer(id);
             await refetch();
+            toast.showSuccess('Flyer Removed');
           } catch {
-            Alert.alert('Could not delete', 'Please try again.');
+            toast.showError('Could Not Delete', 'Please try again.');
           } finally {
             setBusyId(null);
           }
@@ -189,7 +193,7 @@ export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorPr
     try {
       await reorderFlyers(ordered);
     } catch {
-      Alert.alert('Could not reorder', 'Please try again.');
+      toast.showError('Could Not Reorder', 'Please try again.');
     }
   };
 

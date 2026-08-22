@@ -3,43 +3,30 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   Pressable,
   Modal,
   ActivityIndicator,
-  Dimensions,
   ScrollView,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Colors, Spacing, Radius } from '@/theme';
+import { getMediaUrl } from '@/utils/mediaUrl';
+import { ImageViewer } from './Profile/ImageViewer';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// Full-width card in a typical form column (~screen minus horizontal padding).
-const CARD_WIDTH = SCREEN_WIDTH - Spacing.lg * 2 - Spacing.xl * 2;
-const CARD_ASPECT = 1.75; // standard business card width : height
-const CARD_HEIGHT = Math.round(CARD_WIDTH / CARD_ASPECT);
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-type CardSide = 'front' | 'back';
+export type CardSide = 'front' | 'back';
 
 interface BusinessCardUploadProps {
-  /** URL string of the uploaded front card (empty string = not uploaded) */
   cardFront: string;
-  /** URL string of the uploaded back card (empty string = not uploaded) */
   cardBack: string;
-  /** Called after a successful upload with side + returned URL */
-  onUpload: (side: CardSide, url: string) => void;
-  /** Called when either card slot is pressed — caller handles actual upload API call */
+  localFrontUri?: string;
+  localBackUri?: string;
+  onUpload?: (side: CardSide, url: string) => void;
   onPickImage: (side: CardSide, useCamera: boolean) => Promise<void>;
-  /** Whether an upload is in progress (shows spinner on active side) */
+  onRemoveImage?: (side: CardSide) => void;
   isUploading: CardSide | null;
-  /** Optional error message shown below the cards */
   error?: string;
 }
-
-// ─── Guidelines data ─────────────────────────────────────────────────────────
 
 const GUIDELINES = [
   {
@@ -64,67 +51,109 @@ const GUIDELINES = [
   },
 ];
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
   cardFront,
   cardBack,
+  localFrontUri,
+  localBackUri,
   onPickImage,
+  onRemoveImage,
   isUploading,
   error,
 }) => {
+  const [activeSide, setActiveSide] = useState<CardSide>('front');
   const [guidelinesVisible, setGuidelinesVisible] = useState(false);
   const [sourceModalVisible, setSourceModalVisible] = useState(false);
-  const [activeSide, setActiveSide] = useState<CardSide>('front');
 
-  // Step 1: User taps a card slot → show guidelines first
-  const handleCardPress = (side: CardSide) => {
+  // Full Screen Preview state
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
+
+  const resolveCardUri = (uri: string, localUri?: string) => {
+    if (localUri) return localUri;
+    if (!uri) return '';
+    return getMediaUrl(uri) || uri;
+  };
+
+  const frontResolved = resolveCardUri(cardFront, localFrontUri);
+  const backResolved = resolveCardUri(cardBack, localBackUri);
+
+  const handleStartPick = (side: CardSide) => {
     setActiveSide(side);
     setGuidelinesVisible(true);
   };
 
-  // Step 2: User reads guidelines and taps "Continue" → show camera/gallery choice
   const handleGuidelinesContinue = () => {
     setGuidelinesVisible(false);
     setSourceModalVisible(true);
   };
 
-  // Step 3: User picks camera or gallery → delegate to parent
   const handleSourceChoice = async (useCamera: boolean) => {
     setSourceModalVisible(false);
     await onPickImage(activeSide, useCamera);
   };
 
+  const handleOpenPreview = (side: CardSide) => {
+    const list: string[] = [];
+    let initialIdx = 0;
+    if (frontResolved) list.push(frontResolved);
+    if (backResolved) {
+      list.push(backResolved);
+      if (side === 'back') initialIdx = list.length - 1;
+    }
+
+    if (list.length === 0) return;
+    setPreviewImages(list);
+    setPreviewIndex(initialIdx);
+    setPreviewVisible(true);
+  };
+
+  const handleRemove = (side: CardSide) => {
+    if (onRemoveImage) {
+      onRemoveImage(side);
+    }
+  };
+
   return (
     <View style={styles.wrapper}>
-      {/* ── Section header ── */}
+      {/* ── Section Header ── */}
       <View style={styles.sectionHeader}>
         <MaterialIcons name="credit-card" size={20} color={Colors.primary} />
-        <Text style={styles.sectionTitle}>Visiting Card</Text>
+        <Text style={styles.sectionTitle}>Visiting Card (Business Card)</Text>
         <Text style={styles.requiredBadge}>FRONT REQUIRED</Text>
       </View>
 
       <Text style={styles.sectionHint}>
-        Upload a clear photo of both sides of your business card.
+        Upload clear photos of both sides of your business card.
       </Text>
 
-      {/* ── Card slots — stacked so the full card is visible ── */}
-      <View style={styles.cardsStack}>
-        <CardSlot
+      {/* ── Both Front & Back Card Slots Stack ── */}
+      <View style={styles.cardSlotsStack}>
+        {/* FRONT SIDE CARD SLOT */}
+        <SingleCardSlot
           side="front"
-          label="Front Side"
+          label="Front Side (Required)"
           required
-          imageUrl={cardFront}
+          displayUri={frontResolved}
           isUploading={isUploading === 'front'}
-          onPress={() => handleCardPress('front')}
+          onPick={() => handleStartPick('front')}
+          onPreview={() => handleOpenPreview('front')}
+          onChangeImage={() => handleStartPick('front')}
+          onRemove={() => handleRemove('front')}
         />
-        <CardSlot
+
+        {/* BACK SIDE CARD SLOT */}
+        <SingleCardSlot
           side="back"
-          label="Back Side"
+          label="Back Side (Optional)"
           required={false}
-          imageUrl={cardBack}
+          displayUri={backResolved}
           isUploading={isUploading === 'back'}
-          onPress={() => handleCardPress('back')}
+          onPick={() => handleStartPick('back')}
+          onPreview={() => handleOpenPreview('back')}
+          onChangeImage={() => handleStartPick('back')}
+          onRemove={() => handleRemove('back')}
         />
       </View>
 
@@ -140,7 +169,6 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.guidelinesSheet}>
-            {/* Header */}
             <View style={styles.sheetHeader}>
               <View style={styles.sheetDragHandle} />
               <Text style={styles.sheetTitle}>
@@ -151,7 +179,6 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
               </Text>
             </View>
 
-            {/* Card frame illustration */}
             <View style={styles.cardFrameIllustration}>
               <View style={styles.cardFrameCorner} />
               <View style={[styles.cardFrameCorner, styles.cardFrameCornerTR]} />
@@ -159,15 +186,12 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
               <View style={[styles.cardFrameCorner, styles.cardFrameCornerBR]} />
               <MaterialIcons
                 name="credit-card"
-                size={48}
-                color="rgba(255,255,255,0.3)"
+                size={44}
+                color="rgba(255,255,255,0.35)"
               />
-              <Text style={styles.cardFrameLabel}>
-                Place your card here
-              </Text>
+              <Text style={styles.cardFrameLabel}>Place your card here</Text>
             </View>
 
-            {/* Guidelines list */}
             <ScrollView
               style={styles.guidelinesList}
               showsVerticalScrollIndicator={false}
@@ -185,7 +209,6 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
               ))}
             </ScrollView>
 
-            {/* Actions */}
             <View style={styles.sheetActions}>
               <Pressable
                 style={styles.cancelButton}
@@ -220,7 +243,6 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
             </Text>
             <Text style={styles.sourceSubtitle}>Choose how to add your photo</Text>
 
-            {/* Camera option */}
             <Pressable
               style={styles.sourceOption}
               onPress={() => handleSourceChoice(true)}
@@ -234,14 +256,9 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
                   Use your camera for the best quality shot
                 </Text>
               </View>
-              <MaterialIcons
-                name="chevron-right"
-                size={22}
-                color={Colors.text.outline}
-              />
+              <MaterialIcons name="chevron-right" size={22} color={Colors.text.outline} />
             </Pressable>
 
-            {/* Gallery option */}
             <Pressable
               style={styles.sourceOption}
               onPress={() => handleSourceChoice(false)}
@@ -255,11 +272,7 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
                   Pick an existing photo from your device
                 </Text>
               </View>
-              <MaterialIcons
-                name="chevron-right"
-                size={22}
-                color={Colors.text.outline}
-              />
+              <MaterialIcons name="chevron-right" size={22} color={Colors.text.outline} />
             </Pressable>
 
             <Pressable
@@ -271,90 +284,112 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
           </View>
         </View>
       </Modal>
+
+      {/* Full screen Image Viewer */}
+      <ImageViewer
+        visible={previewVisible}
+        images={previewImages}
+        initialIndex={previewIndex}
+        onClose={() => setPreviewVisible(false)}
+      />
     </View>
   );
 };
 
-// ─── CardSlot sub-component ───────────────────────────────────────────────────
+// ─── SingleCardSlot Sub-component ─────────────────────────────────────────────
 
-interface CardSlotProps {
+interface SingleCardSlotProps {
   side: CardSide;
   label: string;
   required: boolean;
-  imageUrl: string;
+  displayUri: string;
   isUploading: boolean;
-  onPress: () => void;
+  onPick: () => void;
+  onPreview: () => void;
+  onChangeImage: () => void;
+  onRemove: () => void;
 }
 
-const CardSlot: React.FC<CardSlotProps> = ({
+const SingleCardSlot: React.FC<SingleCardSlotProps> = ({
   side,
   label,
   required,
-  imageUrl,
+  displayUri,
   isUploading,
-  onPress,
+  onPick,
+  onPreview,
+  onChangeImage,
+  onRemove,
 }) => {
-  const hasImage = Boolean(imageUrl);
+  const hasImage = Boolean(displayUri);
 
   return (
-    <View style={styles.cardSlotWrapper}>
-      {/* Label row */}
-      <View style={styles.cardSlotLabelRow}>
-        <Text style={styles.cardSlotLabel}>{label}</Text>
-        {required && <Text style={styles.cardSlotRequired}>*</Text>}
+    <View style={styles.slotBlock}>
+      <View style={styles.slotHeaderRow}>
+        <Text style={styles.slotHeaderLabel}>{label}</Text>
+        {required && <Text style={styles.slotRequiredText}>*</Text>}
       </View>
 
-      {/* Card pressable area */}
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => [
-          styles.cardSlot,
-          hasImage && styles.cardSlotFilled,
-          pressed && styles.cardSlotPressed,
-        ]}
-      >
-        {isUploading ? (
-          <View style={styles.cardSlotLoader}>
-            <ActivityIndicator size="small" color={Colors.secondary} />
-            <Text style={styles.cardSlotLoaderText}>Uploading...</Text>
-          </View>
-        ) : hasImage ? (
-          <>
-            <Image
-              source={{ uri: imageUrl }}
-              style={styles.cardSlotImage}
-              resizeMode="contain"
-            />
-            {/* Edit badge overlay */}
-            <View style={styles.cardSlotEditBadge}>
-              <MaterialIcons name="edit" size={13} color="#FFFFFF" />
-              <Text style={styles.cardSlotEditText}>Change</Text>
+      <View style={[styles.slotCardContainer, hasImage && styles.slotCardFilled]}>
+        <Pressable
+          onPress={hasImage ? onPreview : onPick}
+          style={({ pressed }) => [styles.slotPressArea, pressed && styles.slotPressed]}
+        >
+          {isUploading ? (
+            <View style={styles.slotLoader}>
+              <ActivityIndicator size="small" color={Colors.secondary} />
+              <Text style={styles.slotLoaderText}>Uploading photo...</Text>
             </View>
-            {/* Success tick */}
-            <View style={styles.cardSlotSuccessTick}>
-              <MaterialIcons name="check-circle" size={20} color="#4CAF50" />
+          ) : hasImage ? (
+            <View style={styles.imagePreviewWrapper}>
+              <Image
+                source={{ uri: displayUri }}
+                style={styles.cardImagePreview}
+                contentFit="contain"
+                transition={200}
+              />
+              <View style={styles.tickBadge}>
+                <MaterialIcons name="check-circle" size={18} color="#4CAF50" />
+              </View>
             </View>
-          </>
-        ) : (
-          <View style={styles.cardSlotEmpty}>
-            {/* Corner guides */}
-            <View style={styles.cornerTL} />
-            <View style={styles.cornerTR} />
-            <View style={styles.cornerBL} />
-            <View style={styles.cornerBR} />
+          ) : (
+            <View style={styles.placeholderContent}>
+              <View style={styles.cornerTL} />
+              <View style={styles.cornerTR} />
+              <View style={styles.cornerBL} />
+              <View style={styles.cornerBR} />
+              <MaterialIcons
+                name={side === 'front' ? 'credit-card' : 'flip'}
+                size={26}
+                color={Colors.text.outline}
+              />
+              <Text style={styles.placeholderTitle}>
+                {side === 'front' ? 'Tap to pick Front image' : 'Tap to pick Back image'}
+              </Text>
+            </View>
+          )}
+        </Pressable>
 
-            <MaterialIcons
-              name={side === 'front' ? 'credit-card' : 'flip'}
-              size={28}
-              color={Colors.text.outline}
-            />
-            <Text style={styles.cardSlotEmptyTitle}>
-              {side === 'front' ? 'Add Front' : 'Add Back'}
-            </Text>
-            <Text style={styles.cardSlotEmptyHint}>Tap to upload</Text>
+        {/* Action button bar underneath when image is uploaded */}
+        {hasImage && !isUploading && (
+          <View style={styles.actionBar}>
+            <Pressable style={styles.actionBtn} onPress={onPreview}>
+              <MaterialIcons name="visibility" size={14} color={Colors.primary} />
+              <Text style={styles.actionBtnText}>Preview</Text>
+            </Pressable>
+            <View style={styles.actionDivider} />
+            <Pressable style={styles.actionBtn} onPress={onChangeImage}>
+              <MaterialIcons name="edit" size={14} color={Colors.secondary} />
+              <Text style={styles.actionBtnText}>Change</Text>
+            </Pressable>
+            <View style={styles.actionDivider} />
+            <Pressable style={styles.actionBtn} onPress={onRemove}>
+              <MaterialIcons name="delete" size={14} color={Colors.error} />
+              <Text style={[styles.actionBtnText, { color: Colors.error }]}>Remove</Text>
+            </Pressable>
           </View>
         )}
-      </Pressable>
+      </View>
     </View>
   );
 };
@@ -365,8 +400,6 @@ const styles = StyleSheet.create({
   wrapper: {
     marginTop: Spacing.md,
   },
-
-  // Section header
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -374,7 +407,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: Colors.text.primary,
     flex: 1,
@@ -393,15 +426,162 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.text.outline,
     marginBottom: Spacing.md,
-    lineHeight: 17,
+    lineHeight: 16,
   },
 
-  // Cards stack (full width, one per row)
-  cardsStack: {
-    gap: Spacing.lg,
+  cardSlotsStack: {
+    gap: Spacing.md,
   },
 
-  // Error
+  slotBlock: {
+    width: '100%',
+  },
+  slotHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 2,
+  },
+  slotHeaderLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text.secondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  slotRequiredText: {
+    fontSize: 14,
+    color: Colors.secondary,
+    fontWeight: '900',
+  },
+
+  // Slot box styling — FIXED 125px COMPACT HEIGHT MATCHING LOGO BOX!
+  slotCardContainer: {
+    width: '100%',
+    height: 125,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.text.outline,
+    borderStyle: 'dashed',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+  },
+  slotCardFilled: {
+    borderStyle: 'solid',
+    borderColor: '#4CAF50',
+    borderWidth: 1.5,
+    backgroundColor: '#FAFAFA',
+  },
+  slotPressArea: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slotPressed: {
+    opacity: 0.85,
+  },
+
+  imagePreviewWrapper: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FAFAFA',
+    position: 'relative',
+    padding: 6,
+  },
+  cardImagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  tickBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 1,
+  },
+
+  placeholderContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    position: 'relative',
+    width: '100%',
+    height: '100%',
+  },
+  placeholderTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.text.outline,
+  },
+
+  cornerTL: {
+    position: 'absolute', top: 6, left: 8,
+    width: 12, height: 12,
+    borderTopWidth: 2, borderLeftWidth: 2,
+    borderColor: Colors.text.outline, borderRadius: 1,
+  },
+  cornerTR: {
+    position: 'absolute', top: 6, right: 8,
+    width: 12, height: 12,
+    borderTopWidth: 2, borderRightWidth: 2,
+    borderColor: Colors.text.outline, borderRadius: 1,
+  },
+  cornerBL: {
+    position: 'absolute', bottom: 6, left: 8,
+    width: 12, height: 12,
+    borderBottomWidth: 2, borderLeftWidth: 2,
+    borderColor: Colors.text.outline, borderRadius: 1,
+  },
+  cornerBR: {
+    position: 'absolute', bottom: 6, right: 8,
+    width: 12, height: 12,
+    borderBottomWidth: 2, borderRightWidth: 2,
+    borderColor: Colors.text.outline, borderRadius: 1,
+  },
+
+  actionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    height: 34,
+    paddingHorizontal: 6,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    height: '100%',
+  },
+  actionBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.text.primary,
+  },
+  actionDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: '#CBD5E1',
+  },
+
+  slotLoader: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  slotLoaderText: {
+    fontSize: 11,
+    color: Colors.text.outline,
+    fontWeight: '600',
+  },
+
   errorText: {
     fontSize: 12,
     color: Colors.error,
@@ -409,144 +589,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // ── Card Slot ──
-  cardSlotWrapper: {
-    width: '100%',
-  },
-  cardSlotLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    gap: 2,
-  },
-  cardSlotLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.text.secondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  cardSlotRequired: {
-    fontSize: 14,
-    color: Colors.secondary,
-    fontWeight: '900',
-    lineHeight: 16,
-  },
-  cardSlot: {
-    width: '100%',
-    height: CARD_HEIGHT,
-    borderRadius: Radius.md,
-    borderWidth: 1.5,
-    borderColor: Colors.text.outline,
-    borderStyle: 'dashed',
-    overflow: 'hidden',
-    backgroundColor: '#EEF1F7',
-  },
-  cardSlotFilled: {
-    borderStyle: 'solid',
-    borderColor: '#4CAF50',
-    borderWidth: 2,
-  },
-  cardSlotPressed: {
-    opacity: 0.75,
-  },
-
-  // Empty state
-  cardSlotEmpty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    position: 'relative',
-  },
-  cardSlotEmptyTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.text.secondary,
-    marginTop: 2,
-  },
-  cardSlotEmptyHint: {
-    fontSize: 10,
-    color: Colors.text.outline,
-  },
-
-  // Corner guides on empty card slot
-  cornerTL: {
-    position: 'absolute', top: 8, left: 8,
-    width: 14, height: 14,
-    borderTopWidth: 2, borderLeftWidth: 2,
-    borderColor: Colors.text.outline, borderRadius: 1,
-  },
-  cornerTR: {
-    position: 'absolute', top: 8, right: 8,
-    width: 14, height: 14,
-    borderTopWidth: 2, borderRightWidth: 2,
-    borderColor: Colors.text.outline, borderRadius: 1,
-  },
-  cornerBL: {
-    position: 'absolute', bottom: 8, left: 8,
-    width: 14, height: 14,
-    borderBottomWidth: 2, borderLeftWidth: 2,
-    borderColor: Colors.text.outline, borderRadius: 1,
-  },
-  cornerBR: {
-    position: 'absolute', bottom: 8, right: 8,
-    width: 14, height: 14,
-    borderBottomWidth: 2, borderRightWidth: 2,
-    borderColor: Colors.text.outline, borderRadius: 1,
-  },
-
-  // Filled state
-  cardSlotImage: {
-    width: '100%',
-    height: '100%',
-  },
-  cardSlotEditBadge: {
-    position: 'absolute',
-    bottom: 6,
-    right: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 10,
-    gap: 3,
-  },
-  cardSlotEditText: {
-    fontSize: 10,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  cardSlotSuccessTick: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-  },
-
-  // Uploading state
-  cardSlotLoader: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  cardSlotLoaderText: {
-    fontSize: 11,
-    color: Colors.text.outline,
-    fontWeight: '600',
-  },
-
-  // ── Modals ──
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
   },
 
-  // Guidelines sheet
   guidelinesSheet: {
     backgroundColor: Colors.primary,
     borderTopLeftRadius: 22,
@@ -581,10 +629,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Card frame illustration
   cardFrameIllustration: {
     marginHorizontal: Spacing.xl,
-    height: 100,
+    height: 95,
     borderRadius: 10,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.25)',
@@ -613,7 +660,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Guidelines list
   guidelinesList: {
     paddingHorizontal: Spacing.xl,
     marginBottom: Spacing.lg,
@@ -650,7 +696,6 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
-  // Sheet actions
   sheetActions: {
     flexDirection: 'row',
     gap: Spacing.md,
@@ -688,7 +733,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // ── Source Sheet ──
   sourceSheet: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 22,

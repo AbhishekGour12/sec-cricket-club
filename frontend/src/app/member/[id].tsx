@@ -17,11 +17,13 @@ import { Avatar } from '@/components/Avatar';
 import { LoadingComponent, EmptyState } from '@/components/States';
 import { VisitingCardDisplay } from '@/components/Profile/VisitingCardDisplay';
 import { BusinessFlyersGallery } from '@/components/Profile/BusinessFlyersGallery';
+import { BusinessShowcaseGallery } from '@/components/Profile/BusinessShowcaseGallery';
 import { useApprovalStore } from '../../store/approvalStore';
 import { useNetwork } from '../../hooks/useNetwork';
 import { useAuth } from '../../hooks/useAuth';
 import { api } from '../../services/api';
 import { getMediaUrl } from '../../utils/mediaUrl';
+import { useToast } from '@/components/Toast';
 import type { Member } from '../../hooks/useMembers';
 import type { BusinessFlyer } from '../../store/businessFlyerStore';
 
@@ -39,6 +41,7 @@ interface ContactRow {
 
 export default function MemberProfileScreen() {
   const router = useRouter();
+  const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const memberId = parseInt(String(id), 10);
   const validId = Number.isInteger(memberId) && memberId > 0;
@@ -107,45 +110,46 @@ export default function MemberProfileScreen() {
   const handleCall = useCallback(() => {
     const phone = member?.phone || member?.alternate_phone;
     if (!phone) {
-      Alert.alert('No phone number', 'This member has not shared a phone number.');
+      toast.showInfo('No Phone Number', 'This member has not shared a phone number.');
       return;
     }
     Linking.openURL(`tel:${phone}`).catch(() => {
-      Alert.alert('Unable to call', `Could not open the dialer for ${phone}.`);
+      toast.showError('Unable to Call', `Could not open dialer for ${phone}.`);
     });
-  }, [member]);
+  }, [member, toast]);
 
   const handleWhatsApp = useCallback(() => {
     const phone = (member?.phone || member?.alternate_phone || '').replace(/[^\d+]/g, '');
     if (!phone) {
-      Alert.alert('No phone number', 'This member has not shared a phone number.');
+      toast.showInfo('No Phone Number', 'This member has not shared a phone number.');
       return;
     }
     const digits = phone.replace(/^\+/, '');
     Linking.openURL(`https://wa.me/${digits}`).catch(() => {
-      Alert.alert('Unable to open WhatsApp', 'Please try again.');
+      toast.showError('Unable to Open WhatsApp', 'Please try again.');
     });
-  }, [member]);
+  }, [member, toast]);
 
   const handleEmail = useCallback(() => {
     const email = member?.contact_email || member?.email;
     if (!email) {
-      Alert.alert('No email', 'This member has not shared an email address.');
+      toast.showInfo('No Email Address', 'This member has not shared an email address.');
       return;
     }
     Linking.openURL(`mailto:${email}`).catch(() => {
-      Alert.alert('Unable to email', 'Please try again.');
+      toast.showError('Unable to Send Email', 'Please try again.');
     });
-  }, [member]);
+  }, [member, toast]);
 
   const handleToggleBookmark = useCallback(async () => {
     if (!member) return;
     try {
       await toggleBookmark(member.id, saved);
+      toast.showSuccess(saved ? 'Removed from Network' : 'Added to Network', member.full_name);
     } catch {
-      Alert.alert('Could not update', 'Please check your connection and try again.');
+      toast.showError('Could Not Update', 'Please check your connection and try again.');
     }
-  }, [member, saved, toggleBookmark]);
+  }, [member, saved, toggleBookmark, toast]);
 
   if (approvalStatus !== 'approved') {
     return <Redirect href="/(tabs)/home" />;
@@ -236,6 +240,8 @@ export default function MemberProfileScreen() {
         </View>
 
         <VisitingCardDisplay visitingCard={member.visiting_card} />
+
+        <BusinessShowcaseGallery images={member.business_images} />
 
         <BusinessFlyersGallery flyers={flyers} />
 

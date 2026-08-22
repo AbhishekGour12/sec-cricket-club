@@ -24,9 +24,11 @@ import { useEventStore } from '../../store/eventStore';
 import { FeaturedEventsCarousel } from '@/components/Events/FeaturedEventsCarousel';
 import { UpcomingEventsPreview } from '@/components/Events/UpcomingEventsPreview';
 import { refreshPublishedContent } from '../../utils/refreshContent';
+import { useToast } from '@/components/Toast';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { approvalStatus, rejectedReason, fetchApprovalStatus } = useApprovalStore();
@@ -85,19 +87,19 @@ export default function HomeScreen() {
     if (!user) return;
     try {
       await api.post(`/admin/member/${user.id}/resubmit`);
-      alert('Your registration has been resubmitted successfully!');
+      toast.showSuccess('Registration Resubmitted', 'Your registration has been resubmitted successfully!');
       fetchApprovalStatus();
     } catch (err) {
-      alert('Failed to resubmit. Please try again.');
+      toast.showError('Resubmit Failed', 'Failed to resubmit. Please try again.');
     }
   };
 
   const handleRequestApproval = async () => {
     try {
       const response = await api.post('/me/request-approval');
-      alert(response.data.message || 'Approval request submitted to the administrator successfully.');
+      toast.showSuccess('Request Sent', response.data.message || 'Approval request submitted to the administrator successfully.');
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to submit approval request.');
+      toast.showError('Request Failed', err.response?.data?.message || 'Failed to submit approval request.');
     }
   };
 

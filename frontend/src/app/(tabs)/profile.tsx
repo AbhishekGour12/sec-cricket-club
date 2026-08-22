@@ -16,11 +16,9 @@ import { Colors, Typography, Spacing, Radius, Shadows, ThemeIcon } from '@/theme
 import { Avatar } from '@/components/Avatar';
 import { SectionHeader, Divider } from '@/components/Layout';
 import { AchievementsEditor } from '@/components/Profile/AchievementsEditor';
-import {
-  ContactLinksEditor,
-  ContactLinksValue,
-} from '@/components/Profile/ContactLinksEditor';
+import { ContactLinksEditor, ContactLinksValue } from '@/components/Profile/ContactLinksEditor';
 import { BusinessFlyersEditor } from '@/components/Profile/BusinessFlyersEditor';
+import { BusinessShowcaseGallery } from '@/components/Profile/BusinessShowcaseGallery';
 import { VisitingCardDisplay } from '@/components/Profile/VisitingCardDisplay';
 import { useAuth } from '../../hooks/useAuth';
 import { useApprovalStore } from '../../store/approvalStore';
@@ -28,6 +26,8 @@ import { useProfileEditor } from '../../hooks/useProfileEditor';
 import { useNetwork } from '../../hooks/useNetwork';
 import type { Achievement, PrivacyField, PrivacySettings } from '../../services/authApi';
 import { getMediaUrl } from '../../utils/mediaUrl';
+
+import { useToast } from '@/components/Toast';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^\+?[0-9\s-]{7,15}$/;
@@ -44,6 +44,7 @@ const DEFAULT_PRIVACY: PrivacySettings = {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const toast = useToast();
   const { user, refetchUser, logout, isLoggingOut } = useAuth();
   const { approvalStatus, fetchApprovalStatus } = useApprovalStore();
   const { saveProfile, isSaving } = useProfileEditor();
@@ -154,10 +155,10 @@ export default function ProfileScreen() {
         privacy_settings: privacy,
       });
       setIsEditing(false);
-      Alert.alert('Profile updated', 'Your contact details and accomplishments have been saved.');
+      toast.showSuccess('Profile Updated', 'Your contact details and accomplishments have been saved.');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Please try again.';
-      Alert.alert('Could not save', message);
+      toast.showError('Could Not Save', message);
     }
   };
 
@@ -286,6 +287,9 @@ export default function ProfileScreen() {
               </Text>
             </View>
           </View>
+
+          {/* Product & Business Showcase Images */}
+          <BusinessShowcaseGallery images={user?.business_images} />
 
           {/* Visiting Card — front & back images */}
           <VisitingCardDisplay visitingCard={user?.visiting_card} />

@@ -5,9 +5,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Typography, Spacing, Radius, ThemeConstants } from '@/theme';
 import { Input } from '@/components/Input';
 import { PrimaryButton } from '@/components/Button';
+import { useToast } from '@/components/Toast';
 
 export default function OTPScreen() {
   const router = useRouter();
+  const toast = useToast();
   const { phone } = useLocalSearchParams();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
@@ -23,7 +25,7 @@ export default function OTPScreen() {
   };
 
   const handleResend = () => {
-    alert('OTP Resent');
+    toast.showSuccess('OTP Sent', `A new OTP has been sent to +${phone || '91XXXXXXXXX'}`);
   };
 
   return (

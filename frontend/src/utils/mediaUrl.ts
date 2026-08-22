@@ -15,17 +15,11 @@ export const getMediaUrl = (imagePath?: string | null): string | undefined => {
     return trimmed;
   }
 
-  const envApiUrl = resolveApiBaseUrl() || api.defaults.baseURL || '';
-  const serverUrl = envApiUrl.replace(/\/api\/?$/, '');
-
-  const uploadsIndex = trimmed.indexOf('/uploads/');
-  if (uploadsIndex !== -1) {
-    const relativeUploadPath = trimmed.substring(uploadsIndex);
-    const apiUploadsPath = relativeUploadPath.startsWith('/api/')
-      ? relativeUploadPath
-      : `/api${relativeUploadPath}`;
-    return serverUrl ? `${serverUrl}${apiUploadsPath}` : apiUploadsPath;
+  let envApiUrl = resolveApiBaseUrl() || api.defaults.baseURL || '';
+  if (envApiUrl.startsWith('/')) {
+    envApiUrl = 'https://sec-api.duckdns.org/api';
   }
+  const serverUrl = envApiUrl.replace(/\/api\/?$/, '');
 
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     if (trimmed.startsWith('http://') && serverUrl.startsWith('https://')) {
@@ -34,5 +28,16 @@ export const getMediaUrl = (imagePath?: string | null): string | undefined => {
     return trimmed;
   }
 
-  return undefined;
+  // Handle all relative paths (e.g. /uploads/..., uploads/..., userprofile/..., or filename.jpg)
+  let cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  if (!cleanPath.startsWith('/uploads/') && !cleanPath.startsWith('/api/uploads/')) {
+    if (cleanPath.startsWith('/userprofile/')) {
+      cleanPath = `/uploads${cleanPath}`;
+    } else {
+      cleanPath = `/uploads/userprofile${cleanPath}`;
+    }
+  }
+
+  const apiUploadsPath = cleanPath.startsWith('/api/') ? cleanPath : `/api${cleanPath}`;
+  return `${serverUrl}${apiUploadsPath}`;
 };

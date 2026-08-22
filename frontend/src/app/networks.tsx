@@ -17,9 +17,11 @@ import { AppBar } from '@/components/AppBar';
 import { LoadingComponent, EmptyState } from '@/components/States';
 import { useNetwork } from '../hooks/useNetwork';
 import { getMediaUrl } from '../utils/mediaUrl';
+import { useToast } from '@/components/Toast';
 
 export default function NetworksScreen() {
   const router = useRouter();
+  const toast = useToast();
   const { members, isLoading, error, refetch, toggleBookmark, isTogglingBookmark } = useNetwork();
 
   const handleRemove = (memberId: number, name: string) => {
@@ -31,8 +33,9 @@ export default function NetworksScreen() {
         onPress: async () => {
           try {
             await toggleBookmark(memberId, true);
+            toast.showSuccess('Removed from Network', `${name} removed.`);
           } catch {
-            Alert.alert('Could not update', 'Please check your connection and try again.');
+            toast.showError('Could Not Update', 'Please check your connection and try again.');
           }
         },
       },

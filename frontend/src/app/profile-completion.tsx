@@ -30,6 +30,7 @@ import {
 import { getMediaUrl } from '../utils/mediaUrl';
 import { compressImageForUpload } from '../utils/compressImage';
 import { StatusBar } from 'expo-status-bar';
+import { useToast } from '@/components/Toast';
 
 const DESIGNATIONS = [
   'Associate Member',
@@ -86,6 +87,7 @@ const step4Schema = z.object({
 
 export default function ProfileCompletionScreen() {
   const router = useRouter();
+  const toast = useToast();
   const { user, refetchUser, logout } = useAuth();
   const storeUpdateUser = useAuthStore((state) => state.updateUser);
   const { step, formData, updateFormData, nextStep, prevStep, reset } = useProfileStore();
@@ -103,6 +105,8 @@ export default function ProfileCompletionScreen() {
   // Visiting card split local states
   const [cardFront, setCardFront] = useState('');
   const [cardBack, setCardBack] = useState('');
+  const [localFrontUri, setLocalFrontUri] = useState('');
+  const [localBackUri, setLocalBackUri] = useState('');
 
   // Sync user attributes upon entry
   useEffect(() => {
@@ -168,7 +172,7 @@ export default function ProfileCompletionScreen() {
     const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
     const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
-      alert('Camera and Gallery access permissions are required to upload pictures.');
+      toast.showError('Permission Required', 'Camera and Gallery access permissions are required to upload pictures.');
       return false;
     }
     return true;
@@ -208,9 +212,9 @@ export default function ProfileCompletionScreen() {
       console.error(`Upload error for ${type}:`, err);
       if (err.response?.data?.validationErrors && Array.isArray(err.response.data.validationErrors)) {
         const errorMsg = err.response.data.validationErrors.join('\n\n');
-        alert(`Visiting Card Image Rejected:\n\n${errorMsg}`);
+        toast.showError('Visiting Card Image Rejected', errorMsg);
       } else {
-        alert(err.response?.data?.message || 'Failed to upload image. Please try again.');
+        toast.showError('Upload Failed', err.response?.data?.message || 'Failed to upload image. Please try again.');
       }
       return null;
     } finally {
@@ -260,24 +264,32 @@ export default function ProfileCompletionScreen() {
           updateFormData({ business_logo: uploadRes.url });
         }
       } else if (type === 'visiting-card-front') {
+        setLocalFrontUri(pickedUri);
         const uploadRes = await handleUploadImage(pickedUri, 'visiting-card-front', useCamera);
         if (uploadRes && uploadRes.url) {
-          setCardFront(uploadRes.url);
-          const completeCard = cardBack ? `${uploadRes.url},${cardBack}` : uploadRes.url;
-          updateFormData({ visiting_card: completeCard });
-          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+          const newFront = uploadRes.url;
+          setCardFront(newFront);
+          const currentCards = (formData.visiting_card || '').split(',').map((s) => s.trim()).filter(Boolean);
+          const existingBack = cardBack || currentCards[1] || '';
+          const combined = [newFront, existingBack].filter(Boolean).join(',');
+          updateFormData({ visiting_card: combined });
+          toast.showSuccess('Front side of card uploaded');
         }
       } else if (type === 'visiting-card-back') {
+        setLocalBackUri(pickedUri);
         const uploadRes = await handleUploadImage(pickedUri, 'visiting-card-back', useCamera);
         if (uploadRes && uploadRes.url) {
-          setCardBack(uploadRes.url);
-          const completeCard = cardFront ? `${cardFront},${uploadRes.url}` : uploadRes.url;
-          updateFormData({ visiting_card: completeCard });
-          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+          const newBack = uploadRes.url;
+          setCardBack(newBack);
+          const currentCards = (formData.visiting_card || '').split(',').map((s) => s.trim()).filter(Boolean);
+          const existingFront = cardFront || currentCards[0] || '';
+          const combined = [existingFront, newBack].filter(Boolean).join(',');
+          updateFormData({ visiting_card: combined });
+          toast.showSuccess('Back side of card uploaded');
         }
       } else if (type === 'business-images') {
         if (formData.business_images.length >= 5) {
-          alert('Maximum 5 showcase images are allowed.');
+          toast.showWarning('Limit Reached', 'Maximum 5 showcase images are allowed.');
           return;
         }
         const uploadRes = await handleUploadImage(pickedUri, 'business-images');
@@ -285,9 +297,29 @@ export default function ProfileCompletionScreen() {
           updateFormData({
             business_images: [...formData.business_images, uploadRes.urls[0]],
           });
+          toast.showSuccess('Showcase image added');
         }
       }
     }
+  };
+
+  const handleRemoveVisitingCard = (side: 'front' | 'back') => {
+    let nextFront = cardFront;
+    let nextBack = cardBack;
+
+    if (side === 'front') {
+      nextFront = '';
+      setCardFront('');
+      setLocalFrontUri('');
+    } else {
+      nextBack = '';
+      setCardBack('');
+      setLocalBackUri('');
+    }
+
+    const combined = [nextFront, nextBack].filter(Boolean).join(',');
+    updateFormData({ visiting_card: combined });
+    toast.showInfo('Visiting Card Updated', `${side === 'front' ? 'Front' : 'Back'} card image removed.`);
   };
 
   const removeBusinessImage = (indexToRemove: number) => {
@@ -373,7 +405,7 @@ export default function ProfileCompletionScreen() {
       storeUpdateUser(response.data.user);
       await refetchUser();
 
-      alert('Registration Completed! Your profile is pending administrator verification.');
+      toast.showSuccess('Registration Completed!', 'Your profile is pending administrator verification.');
       reset();
       router.replace('/(tabs)/home');
     } catch (err: any) {
@@ -383,7 +415,7 @@ export default function ProfileCompletionScreen() {
         (err.response?.status === 409
           ? 'This phone or membership number is already used by another member.'
           : 'Failed to complete registration. Please try again.');
-      alert(message);
+      toast.showError('Profile Submission Failed', message);
     } finally {
       setIsSubmitting(false);
     }
@@ -592,8 +624,10 @@ export default function ProfileCompletionScreen() {
 
             {/* Visiting Card Front/Back — with guidelines modal */}
             <BusinessCardUpload
-              cardFront={cardFront ? (getImageUrl(cardFront) ?? '') : ''}
-              cardBack={cardBack ? (getImageUrl(cardBack) ?? '') : ''}
+              cardFront={cardFront}
+              cardBack={cardBack}
+              localFrontUri={localFrontUri}
+              localBackUri={localBackUri}
               onUpload={() => {}}
               onPickImage={async (side, useCamera) => {
                 await pickImage(
@@ -601,6 +635,7 @@ export default function ProfileCompletionScreen() {
                   useCamera
                 );
               }}
+              onRemoveImage={(side) => handleRemoveVisitingCard(side)}
               isUploading={
                 isUploading === 'visiting-card-front'
                   ? 'front'
@@ -899,7 +934,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Spacing.lg,
-    paddingBottom: 120,
+    paddingBottom: 240,
     flexGrow: 1,
   },
   card: {

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, TextInput, Alert } from 'react-nativ
 import { Colors, Typography, Spacing, Radius, Shadows, ThemeIcon } from '@/theme';
 import { SectionHeader } from '@/components/Layout';
 import type { Achievement } from '../../services/authApi';
+import { useToast } from '@/components/Toast';
 
 interface AchievementsEditorProps {
   achievements: Achievement[];
@@ -20,6 +21,7 @@ export const AchievementsEditor: React.FC<AchievementsEditorProps> = ({
   onChange,
   editable = true,
 }) => {
+  const toast = useToast();
   const [isAdding, setIsAdding] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftYear, setDraftYear] = useState('');
@@ -33,11 +35,11 @@ export const AchievementsEditor: React.FC<AchievementsEditorProps> = ({
   const handleAdd = () => {
     const title = draftTitle.trim();
     if (title.length < 3) {
-      Alert.alert('Add accomplishment', 'Please describe the accomplishment in at least 3 characters.');
+      toast.showWarning('Add Accomplishment', 'Please describe the accomplishment in at least 3 characters.');
       return;
     }
     if (achievements.length >= MAX_ACHIEVEMENTS) {
-      Alert.alert('Limit reached', `You can list up to ${MAX_ACHIEVEMENTS} accomplishments.`);
+      toast.showWarning('Limit Reached', `You can list up to ${MAX_ACHIEVEMENTS} accomplishments.`);
       return;
     }
 

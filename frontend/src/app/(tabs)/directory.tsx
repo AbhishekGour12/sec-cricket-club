@@ -15,6 +15,7 @@ import { Colors, Typography, Spacing, Radius, Shadows, ThemeIcon } from '@/theme
 import { SearchBar } from '@/components/Input';
 import { Avatar } from '@/components/Avatar';
 import { LoadingComponent, EmptyState } from '@/components/States';
+import { useToast } from '@/components/Toast';
 import { useApprovalStore } from '../../store/approvalStore';
 import { useMembers } from '../../hooks/useMembers';
 import { useNetwork } from '../../hooks/useNetwork';
@@ -22,6 +23,7 @@ import { getMediaUrl } from '../../utils/mediaUrl';
 
 export default function DirectoryScreen() {
   const router = useRouter();
+  const toast = useToast();
   const { approvalStatus } = useApprovalStore();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -38,15 +40,16 @@ export default function DirectoryScreen() {
   const handleCall = (phoneNumber?: string) => {
     if (!phoneNumber) return;
     Linking.openURL(`tel:${phoneNumber}`).catch(() => {
-      Alert.alert('Unable to call', `Could not open the dialer for ${phoneNumber}.`);
+      toast.showError('Unable to Call', `Could not open the dialer for ${phoneNumber}.`);
     });
   };
 
   const handleToggleBookmark = async (memberId: number, saved: boolean) => {
     try {
       await toggleBookmark(memberId, saved);
+      toast.showSuccess(saved ? 'Removed from Network' : 'Saved to Network');
     } catch {
-      Alert.alert('Could not update', 'Please check your connection and try again.');
+      toast.showError('Could Not Update', 'Please check your connection and try again.');
     }
   };
 

@@ -18,6 +18,7 @@ import { LoadingComponent, EmptyState } from '@/components/States';
 import { useAnnouncementDetail } from '../../hooks/useAnnouncements';
 import { useApprovalStore } from '../../store/approvalStore';
 import { getMediaUrl } from '../../utils/mediaUrl';
+import { useToast } from '@/components/Toast';
 
 const formatDate = (value?: string | null) => {
   if (!value) return '';
@@ -34,6 +35,7 @@ const formatDate = (value?: string | null) => {
 
 export default function AnnouncementDetailScreen() {
   const router = useRouter();
+  const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const announcementId = parseInt(String(id), 10);
   const validId = Number.isInteger(announcementId) && announcementId > 0;
@@ -63,7 +65,7 @@ export default function AnnouncementDetailScreen() {
         title: announcement.title,
       });
     } catch {
-      Alert.alert('Unable to share', 'Please try again.');
+      toast.showError('Unable to share', 'Please try again.');
     }
   };
 
@@ -72,7 +74,7 @@ export default function AnnouncementDetailScreen() {
     if (!url) return;
     const supported = await Linking.canOpenURL(url);
     if (supported) Linking.openURL(url);
-    else Alert.alert('Unable to open attachment');
+    else toast.showError('Unable to open attachment', 'Could not open attachment link.');
   };
 
   const renderBody = () => {
