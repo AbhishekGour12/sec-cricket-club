@@ -11,7 +11,9 @@
         "simulator": false
       },
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_PUBLIC_API_URL": "https://sec-api.duckdns.org/api",
+        "EXPO_PUBLIC_APP_ENV": "development"
       }
     },
     "preview": {
@@ -25,7 +27,7 @@
       "autoIncrement": true,
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EXPO_PUBLIC_API_URL": "https://sec-cricket-club.onrender.com/api",
+        "EXPO_PUBLIC_API_URL": "https://sec-api.duckdns.org/api",
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "837780082237-n5fr5566aibc80v5ula2ssljqivuf98t.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "837780082237-gmj2oqqtv9ek1a4h1pnrnpfjvr59ktnj.apps.googleusercontent.com",
@@ -43,7 +45,7 @@
       },
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EXPO_PUBLIC_API_URL": "https://sec-cricket-club.onrender.com/api",
+        "EXPO_PUBLIC_API_URL": "https://sec-api.duckdns.org/api",
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "837780082237-n5fr5566aibc80v5ula2ssljqivuf98t.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "837780082237-gmj2oqqtv9ek1a4h1pnrnpfjvr59ktnj.apps.googleusercontent.com",

@@ -21,6 +21,7 @@ import { UserProfile } from '../services/authApi';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LogoBadge } from '@/components/SecLogo';
 import { DotPatternBackground } from '@/components/DotPatternBackground';
+import { warmApiConnection } from '@/services/apiHealth';
 
 // Web (type 3) client is required for idToken; iOS client matches GoogleService-Info.plist.
 const WEB_CLIENT_ID =
@@ -31,9 +32,9 @@ const IOS_CLIENT_ID =
   '837780082237-gmj2oqqtv9ek1a4h1pnrnpfjvr59ktnj.apps.googleusercontent.com';
 
 const PRIVACY_POLICY_URL =
-  process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL || 'https://sec-cricket-club.onrender.com/privacy';
+  process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL || 'https://sec-api.duckdns.org/privacy';
 const TERMS_URL =
-  process.env.EXPO_PUBLIC_TERMS_URL || 'https://sec-cricket-club.onrender.com/terms';
+  process.env.EXPO_PUBLIC_TERMS_URL || 'https://sec-api.duckdns.org/terms';
 
 GoogleSignin.configure({
   webClientId: WEB_CLIENT_ID,
@@ -67,29 +68,11 @@ async function warmGoogleSignIn(): Promise<void> {
   }
 }
 
-const SILENT_SIGN_IN_MS = 1500;
-
-async function trySilentGoogleToken(): Promise<string | null> {
-  try {
-    const silent = await Promise.race([
-      GoogleSignin.signInSilently(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('silent-sign-in-timeout')), SILENT_SIGN_IN_MS),
-      ),
-    ]);
-    if (silent.type === 'success') {
-      return extractGoogleIdToken(silent);
-    }
-  } catch {
-    // Silent sign-in unavailable — use interactive picker.
-  }
-  return null;
-}
-
-/** Fast path: silent cached session, otherwise one interactive Google sign-in. */
+/** Direct interactive Google sign-in without native silent-sign-in queue lock. */
 async function getGoogleIdToken(): Promise<string> {
-  const silentToken = await trySilentGoogleToken();
-  if (silentToken) return silentToken;
+  if (Platform.OS === 'android') {
+    await warmGoogleSignIn();
+  }
 
   const signInResult = await GoogleSignin.signIn();
   if (signInResult.type === 'cancelled') {
@@ -114,8 +97,6 @@ async function authenticateWithBackend(
   try {
     return await login(idToken);
   } catch (directErr) {
-    // Only retry with Firebase when backend explicitly rejects the Google token.
-    // Never fall back on timeout/network errors — that was adding ~15+ extra seconds.
     if (!isRejectedAuthError(directErr)) {
       throw directErr;
     }
@@ -128,7 +109,7 @@ async function authenticateWithBackend(
   }
 }
 
-const SUCCESS_VISIBLE_MS = 700;
+const SUCCESS_VISIBLE_MS = 0;
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -140,6 +121,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     void warmGoogleSignIn();
+    void warmApiConnection();
   }, []);
 
   const navigateAfterLogin = useCallback(
@@ -172,7 +154,6 @@ export default function LoginScreen() {
     setIsSigningIn(true);
     setStatusMessage('Connecting to Google...');
     const startMs = Date.now();
-    await yieldToPaint();
 
     try {
       const t1 = Date.now();

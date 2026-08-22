@@ -36,18 +36,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const response = await AuthApi.loginWithGoogle(idToken);
       
-      // Save credentials locally in parallel
-      await Promise.all([
-        SecureStorageService.setToken(response.token),
-        SecureStorageService.setUserData(response.user),
-      ]);
-
       set({
         jwt: response.token,
         user: response.user,
         isAuthenticated: true,
         isLoading: false,
       });
+
+      // Save credentials locally in non-blocking background task
+      void SecureStorageService.setToken(response.token);
+      void SecureStorageService.setUserData(response.user);
 
       return response.user;
     } catch (err: any) {

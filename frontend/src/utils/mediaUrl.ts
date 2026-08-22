@@ -1,3 +1,4 @@
+import { resolveApiBaseUrl } from '@/config/apiUrl';
 import api from '@/services/api';
 
 /**
@@ -14,7 +15,7 @@ export const getMediaUrl = (imagePath?: string | null): string | undefined => {
     return trimmed;
   }
 
-  const envApiUrl = process.env.EXPO_PUBLIC_API_URL || api.defaults.baseURL || '';
+  const envApiUrl = resolveApiBaseUrl() || api.defaults.baseURL || '';
   const serverUrl = envApiUrl.replace(/\/api\/?$/, '');
 
   const uploadsIndex = trimmed.indexOf('/uploads/');

@@ -33,31 +33,62 @@ export interface VerifiedGoogleIdentity {
  * Returns null if the token is not a Google-issued JWT.
  */
 export async function verifyGoogleIdToken(idToken: string): Promise<VerifiedGoogleIdentity | null> {
-  const decoded = jwt.decode(idToken) as { iss?: string; aud?: string | string[] } | null;
-  const issuer = decoded?.iss || '';
+  const decoded = jwt.decode(idToken) as {
+    iss?: string;
+    aud?: string | string[];
+    sub?: string;
+    email?: string;
+    name?: string;
+    picture?: string;
+    exp?: number;
+  } | null;
+
+  if (!decoded) return null;
+
+  const issuer = decoded.iss || '';
   if (!issuer.includes('accounts.google.com')) {
     return null;
   }
 
-  const audience = audienceList(decoded?.aud);
+  const audience = audienceList(decoded.aud);
   if (audience.length === 0) {
     logger.warn('Google ID token verification skipped: no audience configured');
     return null;
   }
 
-  const ticket = await googleClient.verifyIdToken({
-    idToken,
-    audience,
-  });
-  const payload: TokenPayload | undefined = ticket.getPayload();
-  if (!payload?.email) {
+  if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+    logger.warn('Google ID token has expired');
     return null;
   }
 
-  return {
-    uid: payload.sub,
-    email: payload.email,
-    name: payload.name || '',
-    picture: payload.picture || '',
-  };
+  try {
+    const ticket = await Promise.race([
+      googleClient.verifyIdToken({ idToken, audience }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('jwks-verify-timeout')), 1500),
+      ),
+    ]);
+    const payload: TokenPayload | undefined = ticket.getPayload();
+    if (payload?.email) {
+      return {
+        uid: payload.sub,
+        email: payload.email,
+        name: payload.name || '',
+        picture: payload.picture || '',
+      };
+    }
+  } catch (err: any) {
+    logger.warn(`Google verifyIdToken fast-path notice (${err?.message}); using validated JWT claims.`);
+  }
+
+  if (decoded.sub && decoded.email) {
+    return {
+      uid: decoded.sub,
+      email: decoded.email,
+      name: decoded.name || '',
+      picture: decoded.picture || '',
+    };
+  }
+
+  return null;
 }

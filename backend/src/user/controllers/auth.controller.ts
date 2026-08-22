@@ -58,7 +58,13 @@ export class AuthController {
 
         if (!email && auth) {
           try {
-            const decodedToken = await auth.verifyIdToken(idToken);
+            const firebaseVerifyMs = 2500;
+            const decodedToken = await Promise.race([
+              auth.verifyIdToken(idToken),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('firebase-verify-timeout')), firebaseVerifyMs),
+              ),
+            ]);
             logger.info(`[PERF] 1. Firebase verifyIdToken took: ${Date.now() - t1}ms`);
             uid = decodedToken.uid;
             email = decodedToken.email || '';

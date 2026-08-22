@@ -1,39 +1,9 @@
 import axios from 'axios';
-import { Platform } from 'react-native';
-import Constants from 'expo-constants';
+import { resolveApiBaseUrl } from '@/config/apiUrl';
 import { SecureStorageService } from './secureStore';
 
-const getApiBaseUrl = (): string => {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (envUrl && envUrl.trim().length > 0) {
-    if (__DEV__ && Platform.OS === 'android' && envUrl.includes('localhost')) {
-      return envUrl.replace('localhost', '10.0.2.2');
-    }
-    return envUrl.trim();
-  }
-
-  if (__DEV__) {
-    const hostUri =
-      Constants.expoConfig?.hostUri ||
-      (Constants as { manifest2?: { extra?: { expoGo?: { debuggerHost?: string } } } }).manifest2
-        ?.extra?.expoGo?.debuggerHost;
-
-    if (hostUri) {
-      const hostIp = hostUri.split(':')[0];
-      if (hostIp && hostIp !== 'localhost' && hostIp !== '127.0.0.1') {
-        return `http://${hostIp}:5001/api`;
-      }
-    }
-    return 'http://10.0.2.2:5001/api';
-  }
-
-  return 'https://api.invalid/api';
-};
-
-const baseURL = getApiBaseUrl();
-if (__DEV__) {
-  console.log('[API Base URL]:', baseURL);
-}
+const baseURL = resolveApiBaseUrl();
+console.log('[API Base URL]:', baseURL);
 
 const isFormDataBody = (data: unknown): boolean => {
   if (!data || typeof data !== 'object') return false;
@@ -44,15 +14,17 @@ const isFormDataBody = (data: unknown): boolean => {
 // eslint-disable-next-line import/no-named-as-default-member
 export const api = axios.create({
   baseURL,
-  timeout: 15000,
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 const MAX_RETRIES = 1;
+const AUTH_MAX_RETRIES = 1;
+const AUTH_RETRY_DELAY_MS = 200;
 
-const isRetryableNetworkError = (error: unknown): boolean => {
+export const isRetryableNetworkError = (error: unknown): boolean => {
   const err = error as { code?: string; message?: string; response?: unknown };
   if (err.response) return false;
   const message = (err.message || '').toLowerCase();
@@ -73,6 +45,15 @@ const shouldRetryRequest = (config: { method?: string; url?: string; data?: unkn
   if (isFormDataBody(config.data)) return false;
   return true;
 };
+
+const shouldRetryAuthRequest = (config: { method?: string; url?: string } | undefined): boolean => {
+  if (!config) return false;
+  const method = (config.method || 'get').toLowerCase();
+  if (method !== 'post') return false;
+  return String(config.url || '').includes('/auth/google');
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 api.interceptors.request.use(
   async (config) => {
@@ -97,10 +78,18 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const retryConfig = error.config as (typeof error.config & { _retryCount?: number }) | undefined;
-    if (retryConfig && isRetryableNetworkError(error) && shouldRetryRequest(retryConfig)) {
+    if (retryConfig && isRetryableNetworkError(error)) {
       const currentRetry = retryConfig._retryCount || 0;
-      retryConfig._retryCount = currentRetry + 1;
-      if (retryConfig._retryCount <= MAX_RETRIES) {
+      const maxRetries = shouldRetryAuthRequest(retryConfig) ? AUTH_MAX_RETRIES : MAX_RETRIES;
+
+      if (currentRetry < maxRetries && (shouldRetryAuthRequest(retryConfig) || shouldRetryRequest(retryConfig))) {
+        retryConfig._retryCount = currentRetry + 1;
+        const delayMs = shouldRetryAuthRequest(retryConfig)
+          ? AUTH_RETRY_DELAY_MS * retryConfig._retryCount
+          : 0;
+        if (delayMs > 0) {
+          await sleep(delayMs);
+        }
         return api.request(retryConfig);
       }
     }
@@ -118,11 +107,15 @@ api.interceptors.response.use(
     }
 
     if (isRetryableNetworkError(error)) {
-      return Promise.reject(
-        new Error(
-          `Cannot reach the server (${baseURL}). Please check your connection or backend server status.`,
-        ),
-      );
+      const err = error as { code?: string; message?: string };
+      const detail = err.code || err.message || 'network error';
+      const networkError = new Error(
+        `Cannot reach the server (${baseURL}). Please check your connection or backend server status.`,
+      ) as Error & { code?: string; isNetworkError?: boolean; detail?: string };
+      networkError.code = err.code;
+      networkError.isNetworkError = true;
+      networkError.detail = detail;
+      return Promise.reject(networkError);
     }
 
     return Promise.reject(error);

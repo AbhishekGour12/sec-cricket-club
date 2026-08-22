@@ -9,9 +9,9 @@ import { DangerButton } from '@/components/Button';
 import { useAuth } from '../../hooks/useAuth';
 
 const PRIVACY_POLICY_URL =
-  process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL || 'https://sec-cricket-club.onrender.com/privacy';
+  process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL || 'https://sec-api.duckdns.org/privacy';
 const TERMS_URL =
-  process.env.EXPO_PUBLIC_TERMS_URL || 'https://sec-cricket-club.onrender.com/terms';
+  process.env.EXPO_PUBLIC_TERMS_URL || 'https://sec-api.duckdns.org/terms';
 
 export default function SettingsScreen() {
   const router = useRouter();
