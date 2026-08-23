@@ -11,8 +11,10 @@ import { useApprovalStore } from '../store/approvalStore';
  */
 export function PushNotificationBootstrap() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
   const approvalStatus = useApprovalStore((s) => s.approvalStatus);
-  const enabled = isAuthenticated && approvalStatus === 'approved';
+  const currentStatus = approvalStatus ?? user?.approval_status;
+  const enabled = isAuthenticated && currentStatus === 'approved';
 
   usePushNotifications(enabled);
   useRealtimeStream(enabled);
