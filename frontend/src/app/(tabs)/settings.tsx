@@ -79,6 +79,16 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.settingsCard}>
+          <Pressable style={styles.settingItem} onPress={() => router.push('/notifications' as any)}>
+            <View style={styles.settingLabelColumn}>
+              <Text style={styles.settingTitle}>Notification Inbox</Text>
+              <Text style={styles.settingSubtitle}>View announcements, events, and tournaments</Text>
+            </View>
+            <ThemeIcon name="chevronRight" size={20} color={Colors.text.outline} />
+          </Pressable>
+
+          <Divider style={styles.itemDivider} />
+
           <View style={styles.settingItem}>
             <View style={styles.settingLabelColumn}>
               <Text style={styles.settingTitle}>Push Notifications</Text>

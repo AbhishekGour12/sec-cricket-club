@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { AuthApi, UserProfile } from '../services/authApi';
 import { SecureStorageService } from '../services/secureStore';
+import { api } from '../services/api';
 import { auth as firebaseAuth } from '../config/firebase';
 import { signOut as firebaseSignOut } from 'firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -72,7 +73,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     try {
-      // 3. Clear Secure Storage
+      // 3. Clear push token on server so logout device stops receiving club notifications
+      try {
+        await api.delete('/me/fcm-token', { timeout: 8000 });
+      } catch (err) {
+        console.warn('Zustand AuthStore: Failed to clear push token:', err);
+      }
+
+      // 4. Clear Secure Storage
       await SecureStorageService.clearAuthSession();
 
       set({

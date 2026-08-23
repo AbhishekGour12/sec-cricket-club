@@ -76,9 +76,13 @@ export class AnnouncementService {
       const silent = action === 'unpublished';
       const title =
         action === 'published'
-          ? 'New Club Announcement'
+          ? announcement.announcement_type === 'Tournament'
+            ? 'New Tournament Announcement'
+            : 'New Club Announcement'
           : action === 'updated'
-            ? 'Announcement Updated'
+            ? announcement.announcement_type === 'Tournament'
+              ? 'Tournament Announcement Updated'
+              : 'Announcement Updated'
             : 'Announcement Unpublished';
       await broadcastToApprovedMembers({
         title,

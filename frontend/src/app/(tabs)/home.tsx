@@ -25,6 +25,7 @@ import { FeaturedEventsCarousel } from '@/components/Events/FeaturedEventsCarous
 import { UpcomingEventsPreview } from '@/components/Events/UpcomingEventsPreview';
 import { refreshPublishedContent } from '../../utils/refreshContent';
 import { useToast } from '@/components/Toast';
+import { useNotificationInboxStore } from '../../store/notificationInboxStore';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -40,6 +41,7 @@ export default function HomeScreen() {
     clearToast: clearEventToast,
     setViewMode,
   } = useEventStore();
+  const inboxUnread = useNotificationInboxStore((s) => s.unreadCount());
   const isApproved = approvalStatus === 'approved';
   const {
     events: featuredEvents,
@@ -269,9 +271,25 @@ export default function HomeScreen() {
             <Text style={styles.welcomeText}>Welcome Back</Text>
             <Text style={styles.userName}>{displayName}</Text>
           </View>
-          <Pressable onPress={() => router.push('/(tabs)/profile')}>
-            <Avatar name={displayName} imageUrl={getMediaUrl(user?.profile_image)} size={48} status="active" />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              style={styles.notificationBtn}
+              onPress={() => router.push('/notifications' as any)}
+              accessibilityLabel="Open notifications"
+            >
+              <ThemeIcon name="notification" size={22} color={Colors.primary} />
+              {inboxUnread > 0 ? (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {inboxUnread > 9 ? '9+' : inboxUnread}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+            <Pressable onPress={() => router.push('/(tabs)/profile')}>
+              <Avatar name={displayName} imageUrl={getMediaUrl(user?.profile_image)} size={48} status="active" />
+            </Pressable>
+          </View>
         </View>
 
         {/* Profile completeness badge for approved members who haven't finished their profile */}
@@ -439,6 +457,37 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Spacing.lg,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  notificationBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(26, 39, 68, 0.06)',
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
   },
   welcomeText: {
     ...Typography.caption,

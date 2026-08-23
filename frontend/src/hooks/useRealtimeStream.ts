@@ -7,6 +7,7 @@ import { useAnnouncementStore } from '../store/announcementStore';
 import { useEventStore } from '../store/eventStore';
 import { useRealtimeStore } from '../store/realtimeStore';
 import { refreshPublishedContent } from '../utils/refreshContent';
+import { recordInboxNotification } from '../utils/notificationRecorder';
 
 const RECONNECT_BASE_MS = 2_000;
 const RECONNECT_MAX_MS = 30_000;
@@ -86,6 +87,15 @@ export function useRealtimeStream(enabled: boolean) {
 
       if (payload.channel === 'announcement' && payload.id) {
         const toastTitle = payload.message || 'New Club Announcement';
+        recordInboxNotification(
+          {
+            type: 'announcement',
+            announcementId: String(payload.id),
+            action: payload.action,
+          },
+          toastTitle,
+          payload.title || 'Club announcement',
+        );
         setLatestAnnouncementToast({
           id: payload.id,
           title: payload.title || 'Club announcement',
@@ -101,6 +111,15 @@ export function useRealtimeStream(enabled: boolean) {
 
       if (payload.channel === 'event' && payload.id) {
         const toastTitle = payload.message || 'New Club Event';
+        recordInboxNotification(
+          {
+            type: 'event',
+            eventId: String(payload.id),
+            action: payload.action,
+          },
+          toastTitle,
+          payload.title || 'Club event',
+        );
         setLatestEventToast({
           id: payload.id,
           title: payload.title || 'Club event',

@@ -45,6 +45,7 @@ router.use('/admin/auth', adminAuthRoutes);
 router.get('/me', verifyJwt as any, UserController.getMe);
 router.put('/me', verifyJwt as any, UserController.updateMe);
 router.post('/me/fcm-token', verifyJwt as any, UserController.saveFcmToken);
+router.delete('/me/fcm-token', verifyJwt as any, UserController.clearFcmToken);
 router.post('/me/request-approval', verifyJwt as any, UserController.requestApproval);
 router.get('/realtime/stream', RealtimeController.stream as any);
 

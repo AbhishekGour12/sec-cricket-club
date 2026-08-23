@@ -8,6 +8,9 @@ import { useAnnouncementStore } from '../store/announcementStore';
 import { useEventStore } from '../store/eventStore';
 import { useQueryClient } from '@tanstack/react-query';
 import { refreshPublishedContent } from '../utils/refreshContent';
+import { navigateFromPushData } from '../utils/notificationNavigation';
+import { recordInboxNotification } from '../utils/notificationRecorder';
+import { useNotificationInboxStore } from '../store/notificationInboxStore';
 
 try {
   Notifications.setNotificationHandler({
@@ -110,6 +113,12 @@ export function usePushNotifications(enabled: boolean) {
       foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
         const data = notification.request.content.data as Record<string, string> | undefined;
         const unpublished = data?.action === 'unpublished';
+        const pushTitle = String(notification.request.content.title || '');
+        const pushBody = String(notification.request.content.body || '');
+
+        if (!unpublished) {
+          recordInboxNotification(data, pushTitle || pushBody || 'Club Update', pushBody || pushTitle);
+        }
 
         if (data?.type === 'announcement') {
           const id = data.announcementId ? Number(data.announcementId) : 0;
@@ -154,14 +163,23 @@ export function usePushNotifications(enabled: boolean) {
         const data = response.notification.request.content.data as
           | Record<string, string>
           | undefined;
+        const pushTitle = String(response.notification.request.content.title || '');
+        const pushBody = String(response.notification.request.content.body || '');
+        recordInboxNotification(data, pushTitle || pushBody || 'Club Update', pushBody || pushTitle);
         void refreshPublishedContent(queryClient);
-        if (data?.type === 'event' && data.eventId) {
-          return;
-        }
-        if (data?.type === 'announcement' && data.announcementId) {
-          return;
-        }
+        navigateFromPushData(data);
       });
+
+      const lastResponse = await Notifications.getLastNotificationResponseAsync();
+      if (!cancelled && lastResponse) {
+        const data = lastResponse.notification.request.content.data as Record<string, string> | undefined;
+        const pushTitle = String(lastResponse.notification.request.content.title || '');
+        const pushBody = String(lastResponse.notification.request.content.body || '');
+        recordInboxNotification(data, pushTitle || pushBody || 'Club Update', pushBody || pushTitle);
+        void refreshPublishedContent(queryClient);
+        navigateFromPushData(data);
+        await Notifications.clearLastNotificationResponseAsync();
+      }
     };
 
     void setup();

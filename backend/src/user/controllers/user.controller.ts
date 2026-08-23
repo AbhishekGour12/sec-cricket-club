@@ -314,6 +314,32 @@ export class UserController {
   }
 
   /**
+   * DELETE /api/me/fcm-token
+   * Remove push token on logout or when user disables notifications.
+   */
+  public static async clearFcmToken(req: any, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized', message: 'No authenticated user in context' });
+        return;
+      }
+
+      const user = await User.findByPk(userId);
+      if (!user) {
+        res.status(404).json({ error: 'Not Found', message: 'User not found' });
+        return;
+      }
+
+      await user.update({ fcm_token: null });
+      res.status(200).json({ message: 'FCM token cleared successfully' });
+    } catch (error) {
+      logger.error('Error clearing FCM token:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: 'Failed to clear FCM token' });
+    }
+  }
+
+  /**
    * POST /api/me/request-approval
    * Allow user to request administrator review/approval manually
    */

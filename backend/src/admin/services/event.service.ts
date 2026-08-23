@@ -119,12 +119,19 @@ export class EventService {
   ) {
     try {
       const silent = action === 'unpublished';
+      const isTournament = event.event_type === 'Tournament';
       const title =
         action === 'published'
-          ? 'New Club Event'
+          ? isTournament
+            ? 'New Tournament'
+            : 'New Club Event'
           : action === 'updated'
-            ? 'Event Updated'
-            : 'Event Unpublished';
+            ? isTournament
+              ? 'Tournament Updated'
+              : 'Event Updated'
+            : isTournament
+              ? 'Tournament Unpublished'
+              : 'Event Unpublished';
       await broadcastToApprovedMembers({
         title,
         body: event.event_name,
