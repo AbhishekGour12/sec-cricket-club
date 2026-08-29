@@ -239,6 +239,98 @@ export class AuthController {
       });
     }
   }
+
+  /**
+   * Update logged-in administrator profile.
+   * PUT /api/admin/auth/profile
+   */
+  public static async updateProfile(req: any, res: Response): Promise<void> {
+    try {
+      const adminId = req.admin?.id;
+      if (!adminId) {
+        res.status(401).json({ error: 'Unauthorized', message: 'No authenticated administrator' });
+        return;
+      }
+
+      const admin = await Admin.findByPk(adminId);
+      if (!admin) {
+        res.status(404).json({ error: 'Not Found', message: 'Admin account not found' });
+        return;
+      }
+
+      const { full_name, profile_image } = req.body;
+      if (full_name !== undefined) {
+        admin.full_name = typeof full_name === 'string' ? full_name.trim() : admin.full_name;
+      }
+      if (profile_image !== undefined) {
+        admin.profile_image = typeof profile_image === 'string' ? profile_image.trim() : admin.profile_image;
+      }
+
+      await admin.save();
+
+      logger.info(`Admin profile updated for ID ${admin.id} (${admin.email})`);
+      res.status(200).json({
+        message: 'Profile updated successfully',
+        user: {
+          id: admin.id,
+          email: admin.email,
+          full_name: admin.full_name,
+          profile_image: admin.profile_image,
+          role: 'admin',
+        },
+      });
+    } catch (error) {
+      logger.error('Error updating admin profile:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: 'Failed to update admin profile' });
+    }
+  }
+
+  /**
+   * Change logged-in administrator password.
+   * PUT /api/admin/auth/change-password
+   */
+  public static async changePassword(req: any, res: Response): Promise<void> {
+    try {
+      const adminId = req.admin?.id;
+      if (!adminId) {
+        res.status(401).json({ error: 'Unauthorized', message: 'No authenticated administrator' });
+        return;
+      }
+
+      const { current_password, new_password } = req.body;
+      if (!current_password || !new_password) {
+        res.status(400).json({ error: 'Bad Request', message: 'Current password and new password are required' });
+        return;
+      }
+
+      if (typeof new_password !== 'string' || new_password.length < 6) {
+        res.status(400).json({ error: 'Bad Request', message: 'New password must be at least 6 characters long' });
+        return;
+      }
+
+      const admin = await Admin.findByPk(adminId);
+      if (!admin || !admin.password) {
+        res.status(404).json({ error: 'Not Found', message: 'Admin account not found' });
+        return;
+      }
+
+      const isValid = await bcrypt.compare(current_password, admin.password);
+      if (!isValid) {
+        res.status(400).json({ error: 'Bad Request', message: 'Current password is incorrect' });
+        return;
+      }
+
+      const hashedPassword = await bcrypt.hash(new_password, 10);
+      admin.password = hashedPassword;
+      await admin.save();
+
+      logger.info(`Admin password changed for ID ${admin.id} (${admin.email})`);
+      res.status(200).json({ message: 'Password changed successfully' });
+    } catch (error) {
+      logger.error('Error changing admin password:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: 'Failed to change password' });
+    }
+  }
 }
 export default AuthController;
 

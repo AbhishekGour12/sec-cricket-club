@@ -1,26 +1,46 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { 
   Bell, 
-  Check, 
   Users, 
   Clock, 
-  CheckCircle,
-  Eye,
-  Filter
+  CheckCircle, 
+  Filter,
+  CheckCheck,
+  ArrowRight
 } from 'lucide-react';
 import { AdminLayout, AdminNotification } from '../layouts/AdminLayout';
 import { useNavigate } from 'react-router-dom';
 import { getAdminMediaUrl } from '../utils/mediaUrl';
+import { getApiUrl } from '../lib/api';
+
+const formatRelativeTime = (dateStr?: string) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+  if (diffSec < 60) return 'Just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const cleanText = (text?: string) => {
+  if (!text) return '';
+  // Remove double whitespaces before parentheses
+  return text.replace(/\s+\(/g, ' (').trim();
+};
 
 export const Notifications: React.FC = () => {
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [filterType, setFilterType] = useState<'all' | 'new_registration' | 'approval_request'>('all');
   const [filterRead, setFilterRead] = useState<'all' | 'unread' | 'read'>('all');
   const [isLoading, setIsLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
   const navigate = useNavigate();
 
-  const apiURL = import.meta.env.VITE_API_URL || 'https://sec-api.duckdns.org/api';
+  const apiURL = getApiUrl();
   const token = localStorage.getItem('admin_jwt');
 
   const fetchNotifications = async () => {
@@ -31,8 +51,8 @@ export const Notifications: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       setNotifications(response.data.notifications || []);
-    } catch (err) {
-      // Sanitized error handling
+    } catch {
+      // Handled
     } finally {
       setIsLoading(false);
     }
@@ -48,29 +68,48 @@ export const Notifications: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    } catch (err) {
-      // Sanitized error handling
+    } catch {
+      // Ignore error
     }
   };
 
   const handleMarkAllAsRead = async () => {
     const unread = notifications.filter(n => !n.read);
     if (unread.length === 0) return;
+    setActionLoading(true);
     try {
-      await Promise.all(unread.map(n => 
-        axios.post(`${apiURL}/admin/notifications/${n.id}/read`, {}, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      ));
+      await axios.post(`${apiURL}/admin/notifications/mark-all-read`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    } catch (err) {
-      // Sanitized error handling
+    } catch {
+      // Fallback
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } finally {
+      setActionLoading(false);
     }
   };
 
+  // Deduplication & lifecycle consolidation logic
+  const consolidatedNotifs = useMemo(() => {
+    const seen = new Set<string>();
+    const result: AdminNotification[] = [];
+
+    for (const notif of notifications) {
+      // Group alerts by user_id and day
+      const dateKey = notif.created_at ? notif.created_at.slice(0, 10) : '';
+      const key = `${notif.user_id}_${notif.type}_${dateKey}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(notif);
+      }
+    }
+
+    return result;
+  }, [notifications]);
 
   // Filter logic
-  const filteredNotifs = notifications.filter(n => {
+  const filteredNotifs = consolidatedNotifs.filter(n => {
     const matchType = filterType === 'all' || n.type === filterType;
     const matchRead = filterRead === 'all' || 
       (filterRead === 'unread' && !n.read) || 
@@ -86,32 +125,37 @@ export const Notifications: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold text-[#0E1525] tracking-tight">System Alerts Center</h1>
-            <p className="text-sm text-[#3A4260] mt-1 font-medium">Review club onboarding events and registration approval requests.</p>
+            <h1 className="text-3xl font-extrabold text-[#0E1525] tracking-tight flex items-center gap-2">
+              <Bell size={28} className="text-[#C41230]" />
+              System Alerts &amp; Audit Log
+            </h1>
+            <p className="text-sm text-[#3A4260] mt-1 font-medium">
+              Review member onboarding timelines and registration approval requests in real time.
+            </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
             <button
               onClick={fetchNotifications}
-              className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-[#1A2744] font-semibold text-xs rounded-xl transition-all"
+              className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-[#1A2744] font-bold text-xs rounded-xl transition-all shadow-sm"
             >
-              Refresh Logs
+              Refresh Feed
             </button>
             <button
               onClick={handleMarkAllAsRead}
-              disabled={notifications.filter(n => !n.read).length === 0}
-              className="bg-[#C41230] hover:bg-[#9E0E27] disabled:opacity-50 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-lg transition-all flex items-center gap-1.5"
+              disabled={actionLoading || notifications.filter(n => !n.read).length === 0}
+              className="bg-[#C41230] hover:bg-[#9E0E27] disabled:opacity-50 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5"
             >
-              <Check size={14} />
-              Mark All Read
+              <CheckCheck size={15} />
+              <span>Mark All as Read</span>
             </button>
           </div>
         </div>
 
         {/* Filters Controls Row */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm flex flex-wrap gap-4 items-center justify-between">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-wrap gap-4 items-center justify-between">
           <div className="flex items-center gap-2 text-[#3A4260] text-xs font-extrabold uppercase">
-            <Filter size={14} className="text-[#C41230]" />
-            <span>Filter Alerts</span>
+            <Filter size={15} className="text-[#C41230]" />
+            <span>Filter Event Logs</span>
           </div>
           
           <div className="flex flex-wrap gap-3">
@@ -119,20 +163,20 @@ export const Notifications: React.FC = () => {
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value as any)}
-              className="bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2 text-xs text-[#0E1525] font-medium focus:outline-none focus:border-[#C41230]"
+              className="bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2 text-xs text-[#0E1525] font-semibold focus:outline-none focus:border-[#C41230]"
             >
-              <option value="all">All Types</option>
-              <option value="new_registration">New Registrations</option>
-              <option value="approval_request">Approval Requests</option>
+              <option value="all">All Alert Types</option>
+              <option value="new_registration">New Member Registrations</option>
+              <option value="approval_request">Profile Approval Requests</option>
             </select>
 
             {/* Filter by Read Status */}
             <select
               value={filterRead}
               onChange={(e) => setFilterRead(e.target.value as any)}
-              className="bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2 text-xs text-[#0E1525] font-medium focus:outline-none focus:border-[#C41230]"
+              className="bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2 text-xs text-[#0E1525] font-semibold focus:outline-none focus:border-[#C41230]"
             >
-              <option value="all">Read & Unread</option>
+              <option value="all">All (Read &amp; Unread)</option>
               <option value="unread">Unread Only</option>
               <option value="read">Read Only</option>
             </select>
@@ -142,13 +186,13 @@ export const Notifications: React.FC = () => {
         {/* Logs Panel */}
         <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
           {isLoading ? (
-            <div className="py-16 text-center text-[#3A4260] text-sm">
+            <div className="py-16 text-center text-[#3A4260] text-xs">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#C41230] mb-2"></div>
-              <p>Loading notifications history...</p>
+              <p className="font-semibold">Loading system audit timeline…</p>
             </div>
           ) : filteredNotifs.length === 0 ? (
             <div className="py-16 text-center text-[#3A4260] text-sm font-medium">
-              No matching alerts were found in system logs.
+              No matching alerts or notifications were found in system logs.
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -158,7 +202,7 @@ export const Notifications: React.FC = () => {
                   <div 
                     key={n.id}
                     className={`p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-slate-50 transition-colors ${
-                      isUnread ? 'bg-[#F9D0D7]/20 border-l-4 border-l-[#C41230]' : 'border-l-4 border-l-transparent'
+                      isUnread ? 'bg-indigo-50/40 border-l-4 border-l-[#C41230]' : 'border-l-4 border-l-transparent'
                     }`}
                   >
                     <div className="flex gap-4 items-start flex-1 min-w-0">
@@ -170,16 +214,16 @@ export const Notifications: React.FC = () => {
                       </div>
 
                       {/* Content block */}
-                      <div className="space-y-1 min-w-0">
+                      <div className="space-y-1 min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-sm text-[#0E1525] leading-normal">{n.title}</span>
+                          <span className="font-bold text-xs text-[#0E1525] leading-normal">{cleanText(n.title)}</span>
                           {isUnread && (
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#F9D0D7] text-[#C41230] border border-[#C41230]/20">
-                              NEW
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#C41230] text-white">
+                              UNREAD
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-[#3A4260] leading-relaxed">{n.message}</p>
+                        <p className="text-xs text-[#5A6380] leading-relaxed">{cleanText(n.message)}</p>
                         
                         {/* Member Details mini view */}
                         {n.user && (
@@ -196,21 +240,21 @@ export const Notifications: React.FC = () => {
                               </div>
                             )}
                             <span className="text-[11px] text-[#7A85A0]">
-                              Triggered by: <span className="text-[#0E1525] font-semibold">{n.user.full_name || 'Anonymous'}</span> ({n.user.email})
+                              Applicant: <span className="text-[#0E1525] font-semibold">{n.user.full_name || 'Member'}</span> ({n.user.email})
                             </span>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* Meta & Actions block */}
+                    {/* Meta & Dynamic Action CTA */}
                     <div className="flex items-center gap-4 shrink-0 w-full md:w-auto justify-end md:justify-start border-t border-slate-100 md:border-none pt-3 md:pt-0 mt-1 md:mt-0">
-                      <div className="text-right flex flex-col items-end gap-1 font-mono text-[10px] text-[#7A85A0]">
-                        <span className="flex items-center gap-1">
-                          <Clock size={11} />
-                          {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <div className="text-right flex flex-col items-end gap-0.5 font-mono text-[10px] text-[#7A85A0]" title={n.created_at ? new Date(n.created_at).toLocaleString() : ''}>
+                        <span className="flex items-center gap-1 font-semibold text-[#0E1525]">
+                          <Clock size={11} className="text-[#C41230]" />
+                          {formatRelativeTime(n.created_at)}
                         </span>
-                        <span>{new Date(n.created_at).toLocaleDateString()}</span>
+                        <span>{n.created_at ? new Date(n.created_at).toLocaleDateString() : ''}</span>
                       </div>
 
                       <div className="flex gap-2">
@@ -218,7 +262,7 @@ export const Notifications: React.FC = () => {
                           <button
                             onClick={() => handleMarkAsRead(n.id)}
                             className="p-2 bg-slate-100 hover:bg-slate-200 text-[#1A2744] rounded-xl transition-all"
-                            title="Mark Read"
+                            title="Mark as Read"
                           >
                             <CheckCircle size={14} />
                           </button>
@@ -228,10 +272,10 @@ export const Notifications: React.FC = () => {
                             if (isUnread) handleMarkAsRead(n.id);
                             navigate('/members?tab=pending');
                           }}
-                          className="px-3.5 py-2 bg-[#1A2744]/10 hover:bg-[#1A2744]/20 border border-[#1A2744]/20 text-[#1A2744] font-bold text-xs rounded-xl transition-all flex items-center gap-1"
+                          className="px-3.5 py-2 bg-[#1A2744] hover:bg-[#111B30] text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1 shadow-sm"
                         >
-                          <Eye size={12} />
-                          View Pending
+                          <span>Review Application</span>
+                          <ArrowRight size={12} />
                         </button>
                       </div>
                     </div>
@@ -245,3 +289,5 @@ export const Notifications: React.FC = () => {
     </AdminLayout>
   );
 };
+
+export default Notifications;

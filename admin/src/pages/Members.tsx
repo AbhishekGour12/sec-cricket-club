@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
@@ -7,13 +7,6 @@ import {
   X, 
   ChevronLeft, 
   ChevronRight, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Building, 
-  Globe, 
-  CreditCard,
-  User as UserIcon,
   CheckCircle,
   Clock,
   AlertCircle,
@@ -26,15 +19,17 @@ import {
   Pencil,
   Trash2,
   Star,
-  Instagram,
-  Facebook,
-  Linkedin,
-  EyeOff,
-  Image as ImageIcon
+  Eye,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  FileSpreadsheet,
+  Check
 } from 'lucide-react';
 import { AdminLayout } from '../layouts/AdminLayout';
 import { MemberEditModal, Achievement, PrivacySettings } from '../components/MemberEditModal';
 import { getAdminMediaUrl } from '../utils/mediaUrl';
+import { getApiUrl } from '../lib/api';
 
 interface BusinessFlyer {
   id: number;
@@ -48,7 +43,6 @@ interface BusinessFlyer {
 interface Member {
   id: number;
   firebase_uid: string;
-  /** Nullable: bulk-imported members are keyed on mobile number. */
   email?: string | null;
   full_name?: string;
   profile_image?: string;
@@ -102,31 +96,43 @@ const PRESET_CATEGORIES = [
 
 export const Members: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
+  const [rawMembersList, setRawMembersList] = useState<Member[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'approved' | 'pending' | 'rejected' | 'import' | 'add'>('approved');
+  const [activeTab, setActiveTab] = useState<'approved' | 'pending' | 'rejected'>('approved');
+
+  // Sorting
+  const [sortField, setSortField] = useState<'full_name' | 'created_at' | 'membership_number'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Bulk Selection State
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   
-  // Day 4 Specific States
+  // Approval / Rejection Modals
   const [memberToApprove, setMemberToApprove] = useState<Member | null>(null);
   const [memberToReject, setMemberToReject] = useState<Member | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Profile administration
+  // Profile Edit & Delete Modals
   const [memberToEdit, setMemberToEdit] = useState<Member | null>(null);
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
 
-  // Manual Member Form States
+  // Add Member Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [manualForm, setManualForm] = useState({
     full_name: '',
     email: '',
@@ -134,103 +140,75 @@ export const Members: React.FC = () => {
     membership_number: '',
     designation: 'Associate Member',
     business_name: '',
-    business_category: '',
+    business_category: 'Services & Consulting',
     city: '',
     state: '',
-    country: '',
-    status: 'active', // active / inactive
-    approval_status: 'approved', // approved / pending
+    country: 'India',
+    status: 'active',
+    approval_status: 'approved',
   });
-  const [customCategoryInput, setCustomCategoryInput] = useState('');
-  const [manualSuccess, setManualSuccess] = useState<string | null>(null);
+  const [manualErrors, setManualErrors] = useState<Record<string, string>>({});
+  const [isSubmittingManual, setIsSubmittingManual] = useState(false);
 
-  // Spreadsheet import pipeline state
+  // Spreadsheet Import Modal State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   interface ValidatedRow {
     rowNumber: number;
     full_name: string;
     phone: string;
     email: string;
+    membership_number: string;
     business_name: string;
-    business_description: string;
     business_category: string;
-    business_address: string;
     city: string;
-    instagram_url: string;
-    facebook_url: string;
-    linkedin_url: string;
+    state: string;
+    country: string;
     designation: string;
     errors: string[];
-    action: 'create' | 'update' | 'skip';
   }
 
-  interface ValidationReport {
-    mode: 'create_only' | 'create_update';
-    summary: {
-      total: number;
-      valid: number;
-      errors: number;
-      toCreate: number;
-      toUpdate: number;
-      toSkip: number;
-    };
-    rows: ValidatedRow[];
-  }
-
-  const [rawRows, setRawRows] = useState<any[] | null>(null);
-  const [importReport, setImportReport] = useState<ValidationReport | null>(null);
+  const [importRows, setImportRows] = useState<ValidatedRow[]>([]);
   const [importMode, setImportMode] = useState<'create_only' | 'create_update'>('create_only');
-  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [importReport, setImportReport] = useState<{ total: number; valid: number; errors: number } | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
-  const apiURL = import.meta.env.VITE_API_URL || 'https://sec-api.duckdns.org/api';
+  const apiURL = getApiUrl();
   const token = localStorage.getItem('admin_jwt');
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Synchronize Tab with URL query parameter
   useEffect(() => {
     const tabParam = searchParams.get('tab');
     if (tabParam === 'pending') setActiveTab('pending');
     else if (tabParam === 'rejected') setActiveTab('rejected');
-    else if (tabParam === 'import') setActiveTab('import');
-    else if (tabParam === 'add') setActiveTab('add');
     else setActiveTab('approved');
+    setSelectedIds([]);
   }, [searchParams]);
-
-  // Fetch categories on mount
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  // Re-fetch members when tab, page, or filters change
-  useEffect(() => {
-    fetchMembers();
-  }, [page, categoryFilter, activeTab]);
-
-  // Members can edit their own profile from the app at any time, so refresh
-  // whenever the admin returns to this tab.
-  useEffect(() => {
-    const onFocus = () => {
-      if (activeTab !== 'add' && activeTab !== 'import') fetchMembers();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [activeTab, page, categoryFilter, search]);
 
   const fetchCategories = async () => {
     try {
       const response = await axios.get(`${apiURL}/members/categories`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setCategories(response.data.categories || []);
-    } catch (err: any) {
-      // Sanitized error handling
+      setCategories(response.data.categories || PRESET_CATEGORIES);
+    } catch {
+      setCategories(PRESET_CATEGORIES);
     }
   };
 
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
   const fetchMembers = async () => {
-    if (activeTab === 'add' || activeTab === 'import') {
-      setIsLoading(false);
-      setTotal(0);
-      return;
-    }
     setIsLoading(true);
     setError(null);
     try {
@@ -253,86 +231,185 @@ export const Members: React.FC = () => {
         }
       }
 
-      // Apply client-side search & category filtering
-      let filtered = [...fetchedList];
-      if (search) {
-        const s = search.toLowerCase();
-        filtered = filtered.filter(m => 
-          (m.full_name || '').toLowerCase().includes(s) ||
-          (m.email || '').toLowerCase().includes(s) ||
-          (m.business_name || '').toLowerCase().includes(s) ||
-          (m.business_category || '').toLowerCase().includes(s) ||
-          (m.membership_number || '').toLowerCase().includes(s)
-        );
-      }
-      if (categoryFilter) {
-        filtered = filtered.filter(m => m.business_category === categoryFilter);
-      }
-
-      setTotal(filtered.length);
-      const itemsPerPage = 10;
-      setTotalPages(Math.ceil(filtered.length / itemsPerPage) || 1);
-      
-      const startIndex = (page - 1) * itemsPerPage;
-      setMembers(filtered.slice(startIndex, startIndex + itemsPerPage));
+      setRawMembersList(fetchedList);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load members.');
+      setError(err.response?.data?.message || 'Failed to load members directory.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchMembers();
+  }, [activeTab]);
 
-  /**
-   * Opens the detail drawer. The row we already have is shown immediately, then
-   * replaced with a fresh read so edits made from the member's phone are never
-   * missed because of a stale list.
-   */
+  // Client-side filtering, sorting, and pagination
+  const filteredAndSortedMembers = useMemo(() => {
+    let list = [...rawMembersList];
+
+    // Filter by search
+    if (debouncedSearch.trim()) {
+      const s = debouncedSearch.toLowerCase().trim();
+      list = list.filter(m => 
+        (m.full_name || '').toLowerCase().includes(s) ||
+        (m.email || '').toLowerCase().includes(s) ||
+        (m.phone || '').toLowerCase().includes(s) ||
+        (m.business_name || '').toLowerCase().includes(s) ||
+        (m.business_category || '').toLowerCase().includes(s) ||
+        (m.membership_number || '').toLowerCase().includes(s) ||
+        (m.city || '').toLowerCase().includes(s)
+      );
+    }
+
+    // Filter by category
+    if (categoryFilter) {
+      list = list.filter(m => m.business_category === categoryFilter);
+    }
+
+    // Sorting
+    list.sort((a, b) => {
+      let fieldA = (a[sortField] || '').toString().toLowerCase();
+      let fieldB = (b[sortField] || '').toString().toLowerCase();
+      if (sortField === 'created_at') {
+        const timeA = new Date(a.created_at || 0).getTime();
+        const timeB = new Date(b.created_at || 0).getTime();
+        return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
+      }
+      if (fieldA < fieldB) return sortOrder === 'asc' ? -1 : 1;
+      if (fieldA > fieldB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return list;
+  }, [rawMembersList, debouncedSearch, categoryFilter, sortField, sortOrder]);
+
+  useEffect(() => {
+    setTotal(filteredAndSortedMembers.length);
+    const pages = Math.ceil(filteredAndSortedMembers.length / pageSize) || 1;
+    setTotalPages(pages);
+    if (page > pages) setPage(1);
+
+    const startIndex = (page - 1) * pageSize;
+    setMembers(filteredAndSortedMembers.slice(startIndex, startIndex + pageSize));
+  }, [filteredAndSortedMembers, page, pageSize]);
+
+  const handleSort = (field: 'full_name' | 'created_at' | 'membership_number') => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === members.length && members.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(members.map(m => m.id));
+    }
+  };
+
+  const toggleSelectMember = (id: number) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  // Bulk Actions
+  const handleBulkApprove = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Approve all ${selectedIds.length} selected members?`)) return;
+
+    setActionLoading(true);
+    try {
+      await Promise.all(
+        selectedIds.map(id =>
+          axios.post(
+            `${apiURL}/admin/member/${id}/approve`,
+            { confirm: true },
+            { headers: { Authorization: `Bearer ${token}` } }
+          )
+        )
+      );
+      setSuccessMessage(`Successfully approved ${selectedIds.length} members.`);
+      setSelectedIds([]);
+      fetchMembers();
+      setTimeout(() => setSuccessMessage(null), 3500);
+    } catch {
+      setError('Failed to approve some selected members.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleBulkExportCSV = () => {
+    const listToExport = filteredAndSortedMembers.filter(m => 
+      selectedIds.length === 0 || selectedIds.includes(m.id)
+    );
+
+    const data = listToExport.map(m => ({
+      'Membership Number': m.membership_number || '',
+      'Full Name': m.full_name || '',
+      'Email': m.email || '',
+      'Mobile Phone': m.phone || '',
+      'Designation': m.designation || '',
+      'Business Name': m.business_name || '',
+      'Business Category': m.business_category || '',
+      'City': m.city || '',
+      'State': m.state || '',
+      'Country': m.country || '',
+      'Approval Status': m.approval_status,
+      'Created Date': m.created_at ? new Date(m.created_at).toLocaleDateString() : ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Members');
+    XLSX.writeFile(wb, `sec_members_${activeTab}_${Date.now()}.xlsx`);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Permanently delete ${selectedIds.length} selected members? This cannot be undone.`)) return;
+
+    setActionLoading(true);
+    try {
+      await Promise.all(
+        selectedIds.map(id =>
+          axios.delete(`${apiURL}/admin/member/${id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        )
+      );
+      setSuccessMessage(`Deleted ${selectedIds.length} members successfully.`);
+      setSelectedIds([]);
+      fetchMembers();
+      setTimeout(() => setSuccessMessage(null), 3500);
+    } catch {
+      setError('Failed to delete some selected members.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Open member details drawer (Read-only view)
   const openMemberDrawer = async (member: Member) => {
     setSelectedMember(member);
     setIsDrawerOpen(true);
     try {
-      const response = await axios.get(`${apiURL}/admin/auth/members/${member.id}`, {
+      const response = await axios.get(`${apiURL}/admin/members/${member.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const fresh = response.data.member;
-      if (fresh) {
-        setSelectedMember(fresh);
-        setMembers((current) => current.map((m) => (m.id === fresh.id ? { ...m, ...fresh } : m)));
+      if (response.data.member) {
+        setSelectedMember(response.data.member);
       }
     } catch {
-      // Keep the row snapshot on screen if the refresh call fails.
+      // Keep existing snapshot
     }
   };
 
-  /** Always edit against the newest server copy, never a cached table row. */
-  const openMemberEditor = async (member: Member) => {
-    try {
-      const response = await axios.get(`${apiURL}/admin/auth/members/${member.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setMemberToEdit(response.data.member ?? member);
-    } catch {
-      setMemberToEdit(member);
-    }
-  };
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPage(1);
-    fetchMembers();
-  };
-
-  const handleClearFilters = () => {
-    setSearch('');
-    setCategoryFilter('');
-    setPage(1);
-    setTimeout(() => {
-      fetchMembers();
-    }, 0);
-  };
-
-  const handleApproveConfirm = async () => {
+  const handleConfirmApprove = async () => {
     if (!memberToApprove) return;
     setActionLoading(true);
     try {
@@ -341,80 +418,96 @@ export const Members: React.FC = () => {
         { confirm: true },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      setSuccessMessage(`Approved ${memberToApprove.full_name || 'member'} successfully!`);
       setMemberToApprove(null);
+      if (selectedMember?.id === memberToApprove.id) setIsDrawerOpen(false);
       fetchMembers();
-      setIsDrawerOpen(false);
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to approve member.');
+      setError(err?.response?.data?.message || 'Failed to approve member.');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleRejectSubmit = async (e: React.FormEvent) => {
+  const handleConfirmReject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!memberToReject) return;
-    if (!rejectionReason.trim() || rejectionReason.trim().length < 5) {
-      alert('Rejection reason must be at least 5 characters long.');
+    if (rejectionReason.trim().length < 5) {
+      alert('Please provide a descriptive rejection reason (min 5 characters).');
       return;
     }
+
     setActionLoading(true);
     try {
       await axios.post(
         `${apiURL}/admin/member/${memberToReject.id}/reject`,
-        { reason: rejectionReason },
+        { reason: rejectionReason.trim() },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      setSuccessMessage(`Application rejected. An explanatory email notification has been dispatched to ${memberToReject.email || 'the applicant'}.`);
       setMemberToReject(null);
       setRejectionReason('');
+      if (selectedMember?.id === memberToReject.id) setIsDrawerOpen(false);
       fetchMembers();
-      setIsDrawerOpen(false);
+      setTimeout(() => setSuccessMessage(null), 3500);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to reject member.');
+      setError(err?.response?.data?.message || 'Failed to reject application.');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleDeleteConfirm = async () => {
+  const handleConfirmDelete = async () => {
     if (!memberToDelete) return;
     setActionLoading(true);
     try {
-      const response = await axios.delete(`${apiURL}/admin/member/${memberToDelete.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      await axios.delete(`${apiURL}/admin/member/${memberToDelete.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
+      setSuccessMessage(`Deleted ${memberToDelete.full_name || 'member'} permanently.`);
       setMemberToDelete(null);
-      setIsDrawerOpen(false);
-      setSelectedMember(null);
-      setImportSuccess(response.data.message || 'Member deleted.');
+      if (selectedMember?.id === memberToDelete.id) setIsDrawerOpen(false);
       fetchMembers();
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to delete the member.');
-      setMemberToDelete(null);
+      setError(err?.response?.data?.message || 'Failed to delete member.');
     } finally {
       setActionLoading(false);
     }
   };
 
-  // 1. Single Manual Member Form Submit
+  // Add Member Manual Submission Validation
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setActionLoading(true);
-    setManualSuccess(null);
-    setError(null);
+    const errors: Record<string, string> = {};
+
+    if (!manualForm.full_name.trim()) errors.full_name = 'Full name is required';
+    if (!manualForm.email.trim()) errors.email = 'Email address is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(manualForm.email.trim())) errors.email = 'Invalid email format';
+
+    if (!manualForm.phone.trim()) errors.phone = 'Mobile number is required';
+    else if (!/^[+]?[\d\s-]{10,15}$/.test(manualForm.phone.trim())) errors.phone = 'Invalid phone number (min 10 digits)';
+
+    if (!manualForm.membership_number.trim()) errors.membership_number = 'Membership ID is required';
+    if (!manualForm.business_name.trim()) errors.business_name = 'Business name is required';
+
+    if (Object.keys(errors).length > 0) {
+      setManualErrors(errors);
+      return;
+    }
+
+    setManualErrors({});
+    setIsSubmittingManual(true);
+
     try {
-      const submitPayload = { ...manualForm };
-      if (submitPayload.business_category === 'Others' && customCategoryInput.trim()) {
-        submitPayload.business_category = customCategoryInput.trim();
-      }
-      const response = await axios.post(
+      await axios.post(
         `${apiURL}/admin/members/create-manual`,
-        submitPayload,
+        manualForm,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setManualSuccess(response.data.message || 'Member Created Successfully!');
-      setCustomCategoryInput('');
-      // Reset form
+      setSuccessMessage(`Member "${manualForm.full_name}" registered successfully.`);
+      setIsAddModalOpen(false);
       setManualForm({
         full_name: '',
         email: '',
@@ -422,152 +515,163 @@ export const Members: React.FC = () => {
         membership_number: '',
         designation: 'Associate Member',
         business_name: '',
-        business_category: '',
+        business_category: 'Services & Consulting',
         city: '',
         state: '',
-        country: '',
+        country: 'India',
         status: 'active',
         approval_status: 'approved',
       });
+      fetchMembers();
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create manual member.');
+      setManualErrors({ form: err?.response?.data?.message || 'Failed to create member record.' });
     } finally {
-      setActionLoading(false);
+      setIsSubmittingManual(false);
     }
   };
 
-  const saveBlob = (data: BlobPart, filename: string) => {
-    const url = window.URL.createObjectURL(new Blob([data], { type: 'text/csv;charset=utf-8;' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-  };
-
-  // 2. Download the server-generated template (single source of truth)
-  const downloadTemplate = async () => {
-    setError(null);
-    try {
-      const response = await axios.get(`${apiURL}/admin/members/import-template`, {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'blob',
-      });
-      saveBlob(response.data, 'sec_member_import_template.csv');
-    } catch {
-      setError('Failed to download the import template.');
-    }
-  };
-
-  // 3. Parse the chosen spreadsheet, then ask the server to validate it
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // CSV Import Validation Engine
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    setImportSuccess(null);
-    setError(null);
-
-    if (file.size > 10 * 1024 * 1024) {
-      setError('Maximum file size limit of 10 MB exceeded.');
-      return;
-    }
 
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const wb = XLSX.read(evt.target?.result, { type: 'binary' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json<any>(ws, { defval: '' });
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rawJson: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
-        if (data.length === 0) {
-          setError('The selected file has no data rows.');
-          return;
-        }
-        if (data.length > 5000) {
-          setError('Maximum spreadsheet limit of 5,000 rows exceeded.');
-          return;
-        }
+        const validated: ValidatedRow[] = rawJson.map((row, idx) => {
+          const rowNum = idx + 2;
+          const errs: string[] = [];
 
-        setRawRows(data);
-        validateImport(data, importMode);
+          const mNum = String(row['Membership Number'] || row['membership_number'] || '').trim();
+          const name = String(row['Full Name'] || row['full_name'] || '').trim();
+          const email = String(row['Email'] || row['email'] || '').trim().toLowerCase();
+          const phone = String(row['Mobile Number'] || row['mobile_number'] || row['phone'] || '').trim();
+          const designation = String(row['Designation'] || row['designation'] || 'Associate Member').trim();
+          const bizName = String(row['Business Name'] || row['business_name'] || '').trim();
+          const bizCat = String(row['Business Category'] || row['business_category'] || 'Others').trim();
+          const city = String(row['City'] || row['city'] || '').trim();
+          const state = String(row['State'] || row['state'] || '').trim();
+          const country = String(row['Country'] || row['country'] || 'India').trim();
+
+          if (!mNum) errs.push('Missing Membership Number');
+          if (!name) errs.push('Missing Full Name');
+          if (!email) errs.push('Missing Email');
+          else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.push('Invalid Email format');
+
+          return {
+            rowNumber: rowNum,
+            membership_number: mNum,
+            full_name: name,
+            email,
+            phone,
+            designation,
+            business_name: bizName,
+            business_category: bizCat,
+            city,
+            state,
+            country,
+            errors: errs,
+          };
+        });
+
+        const errorCount = validated.filter(r => r.errors.length > 0).length;
+        setImportRows(validated);
+        setImportReport({
+          total: validated.length,
+          valid: validated.length - errorCount,
+          errors: errorCount,
+        });
       } catch {
-        setError('Failed to parse the spreadsheet. Please upload a valid CSV, XLS, or XLSX file.');
+        alert('Failed to parse spreadsheet file. Please verify CSV/Excel format.');
       }
     };
     reader.readAsBinaryString(file);
   };
 
-  const validateImport = async (rows: any[], mode: 'create_only' | 'create_update') => {
-    setActionLoading(true);
-    setError(null);
-    try {
-      const response = await axios.post<ValidationReport>(
-        `${apiURL}/admin/members/import/validate`,
-        { rows, mode },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      setImportReport(response.data);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to validate the spreadsheet.');
-      setImportReport(null);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleModeChange = (mode: 'create_only' | 'create_update') => {
-    setImportMode(mode);
-    // Duplicate handling differs per mode, so re-validate against the server.
-    if (rawRows) validateImport(rawRows, mode);
-  };
-
-  const downloadErrorReport = async () => {
-    if (!rawRows) return;
-    try {
-      const response = await axios.post(
-        `${apiURL}/admin/members/import/error-report`,
-        { rows: rawRows, mode: importMode },
-        { headers: { Authorization: `Bearer ${token}` }, responseType: 'blob' },
-      );
-      saveBlob(response.data, 'sec_member_import_errors.csv');
-    } catch {
-      setError('Failed to download the error report.');
-    }
-  };
-
-  const resetImport = () => {
-    setRawRows(null);
-    setImportReport(null);
-    const fileInput = document.getElementById('excel-file-input') as HTMLInputElement;
-    if (fileInput) fileInput.value = '';
-  };
-
-  // 4. Commit — the server re-validates and writes in a single transaction
-  const handleBulkImportSubmit = async () => {
-    if (!rawRows || !importReport || importReport.summary.errors > 0) return;
-
-    setActionLoading(true);
-    setError(null);
-    setImportSuccess(null);
-
-    try {
-      const response = await axios.post(
-        `${apiURL}/admin/members/import/commit`,
-        { rows: rawRows, mode: importMode },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      setImportSuccess(response.data.message);
-      resetImport();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to complete the import. No members were changed.');
-      if (err.response?.status === 422 && err.response.data?.rows) {
-        setImportReport(err.response.data as ValidationReport);
+  const handleCommitImport = async () => {
+    if (importRows.length === 0) return;
+    if (importReport && importReport.errors > 0) {
+      if (!window.confirm(`There are ${importReport.errors} invalid rows with errors. Do you want to proceed and skip invalid rows?`)) {
+        return;
       }
-    } finally {
-      setActionLoading(false);
     }
+
+    const validPayload = importRows
+      .filter(r => r.errors.length === 0)
+      .map(r => ({
+        'Membership Number': r.membership_number,
+        'Full Name': r.full_name,
+        'Email': r.email,
+        'Mobile Number': r.phone,
+        'Designation': r.designation,
+        'Business Name': r.business_name,
+        'Business Category': r.business_category,
+        'City': r.city,
+        'State': r.state,
+        'Country': r.country,
+      }));
+
+    setIsImporting(true);
+    try {
+      const response = await axios.post(
+        `${apiURL}/admin/members/bulk-import`,
+        { records: validPayload, mode: importMode },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSuccessMessage(`Import completed! Created: ${response.data.results?.created || 0}, Updated: ${response.data.results?.updated || 0}.`);
+      setIsImportModalOpen(false);
+      setImportRows([]);
+      setImportReport(null);
+      fetchMembers();
+      setTimeout(() => setSuccessMessage(null), 3500);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to complete bulk import.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const headers = [
+      'Membership Number',
+      'Full Name',
+      'Email',
+      'Mobile Number',
+      'Designation',
+      'Business Name',
+      'Business Category',
+      'City',
+      'State',
+      'Country'
+    ];
+    const example = [
+      'SEC0001',
+      'Rahul Sharma',
+      'rahul@example.com',
+      '9876543210',
+      'Director',
+      'Sharma Steel',
+      'Manufacturing & Production',
+      'Ludhiana',
+      'Punjab',
+      'India'
+    ];
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), example.join(',')].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "sec_member_import_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const getImageUrl = (path?: string) =>
@@ -576,1373 +680,1095 @@ export const Members: React.FC = () => {
       'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100',
     );
 
-  const getVisitingCards = (visitingCardString?: string): string[] => {
-    if (!visitingCardString) return [];
-    const trimmed = visitingCardString.trim();
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      try {
-        return JSON.parse(trimmed);
-      } catch (e) {
-        // Fallback
-      }
-    }
-    return trimmed.split(',').map(s => s.trim()).filter(Boolean);
-  };
-
-  const handleDeleteBusinessFlyer = async (flyerId: number) => {
-    if (!selectedMember) return;
-    if (!window.confirm('Delete this business flyer? This cannot be undone.')) return;
-
-    try {
-      setActionLoading(true);
-      const token = localStorage.getItem('admin_jwt');
-      await axios.delete(
-        `${apiURL}/admin/member/${selectedMember.id}/business-flyers/${flyerId}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      setSelectedMember({
-        ...selectedMember,
-        business_flyers: (selectedMember.business_flyers || []).filter((f) => f.id !== flyerId),
-      });
-    } catch (err: any) {
-      alert(err?.response?.data?.message || 'Failed to delete business flyer');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const downloadImage = (path: string, fileName: string) => {
-    const url = getImageUrl(path);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.target = '_blank';
-    anchor.rel = 'noopener noreferrer';
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-  };
-
-  const getStatusBadge = (approvalStatus: string) => {
-    switch (approvalStatus) {
-      case 'approved':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <CheckCircle size={12} className="mr-1" />
-            Verified Member
-          </span>
-        );
-      case 'rejected':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-            <AlertCircle size={12} className="mr-1" />
-            Registration Rejected
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <Clock size={12} className="mr-1" />
-            Pending Approval
-          </span>
-        );
-    }
+  const formatApproverDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   return (
     <AdminLayout>
       <div className="space-y-6 relative min-h-screen pb-20 text-[#0E1525]">
-        {/* Header */}
-        <div className="flex justify-between items-center">
+        {/* Top Header Row with Persistent Action CTAs */}
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold text-[#0E1525] tracking-tight">Members Workflow</h1>
-            <p className="text-sm text-[#3A4260] mt-1 font-medium">Review, approve, and manage registered members verification status.</p>
+            <h1 className="text-3xl font-extrabold text-[#0E1525] tracking-tight">
+              Members Administration
+            </h1>
+            <p className="text-sm text-[#3A4260] mt-1 font-medium">
+              Review verification status, inspect ID proofs, and manage the official club roster.
+            </p>
           </div>
-          <div className="bg-white px-4 py-2 border border-slate-200 shadow-sm rounded-xl">
-            <span className="text-xs text-[#7A85A0] font-bold uppercase tracking-wider">Total Listings</span>
-            <p className="text-lg font-extrabold text-[#1A2744]">{total}</p>
+
+          {/* Action CTAs (Separated from filter tabs) */}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={downloadTemplate}
+              className="px-3.5 py-2.5 bg-white border border-slate-200 hover:border-slate-300 text-[#1A2744] text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+              title="Download CSV Template"
+            >
+              <Download size={14} />
+              <span>Template</span>
+            </button>
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-4 py-2.5 bg-white border border-[#1A2744] text-[#1A2744] hover:bg-[#1A2744] hover:text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+            >
+              <FileSpreadsheet size={15} />
+              <span>Import CSV</span>
+            </button>
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="px-4 py-2.5 bg-[#C41230] hover:bg-[#9E0E27] text-white text-xs font-bold rounded-xl transition-all shadow-md flex items-center gap-1.5"
+            >
+              <Plus size={15} />
+              <span>Add Member</span>
+            </button>
           </div>
         </div>
 
-        {/* Tab Selection */}
-        <div className="flex flex-wrap border-b border-slate-200 gap-6">
+        {/* Notifications & Alerts */}
+        {error && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-xs font-semibold flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={16} />
+              <span>{error}</span>
+            </div>
+            <button onClick={() => setError(null)} className="text-rose-500 hover:text-rose-800">✕</button>
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl text-xs font-semibold flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle size={16} />
+              <span>{successMessage}</span>
+            </div>
+            <button onClick={() => setSuccessMessage(null)} className="text-emerald-500 hover:text-emerald-800">✕</button>
+          </div>
+        )}
+
+        {/* Clean Status Filter Tabs */}
+        <div className="flex border-b border-slate-200 gap-8">
           <button 
             onClick={() => { setActiveTab('approved'); setPage(1); setSearchParams({ tab: 'approved' }); }}
-            className={`pb-4 text-sm font-bold transition-all relative ${
+            className={`pb-3.5 text-sm font-bold transition-all relative flex items-center gap-2 ${
               activeTab === 'approved' ? 'text-[#C41230]' : 'text-[#7A85A0] hover:text-[#0E1525]'
             }`}
           >
-            Approved Members
+            <span>Approved Members</span>
             {activeTab === 'approved' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#C41230]" />}
           </button>
+
           <button 
             onClick={() => { setActiveTab('pending'); setPage(1); setSearchParams({ tab: 'pending' }); }}
-            className={`pb-4 text-sm font-bold transition-all relative ${
+            className={`pb-3.5 text-sm font-bold transition-all relative flex items-center gap-2 ${
               activeTab === 'pending' ? 'text-[#C41230]' : 'text-[#7A85A0] hover:text-[#0E1525]'
             }`}
           >
-            Pending Approvals
+            <span>Pending Approvals</span>
+            {rawMembersList.filter(m => m.approval_status === 'pending').length > 0 && (
+              <span className="px-1.5 py-0.2 text-[10px] font-black bg-amber-500 text-white rounded-full">
+                {rawMembersList.filter(m => m.approval_status === 'pending').length}
+              </span>
+            )}
             {activeTab === 'pending' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#C41230]" />}
           </button>
+
           <button 
             onClick={() => { setActiveTab('rejected'); setPage(1); setSearchParams({ tab: 'rejected' }); }}
-            className={`pb-4 text-sm font-bold transition-all relative ${
+            className={`pb-3.5 text-sm font-bold transition-all relative flex items-center gap-2 ${
               activeTab === 'rejected' ? 'text-[#C41230]' : 'text-[#7A85A0] hover:text-[#0E1525]'
             }`}
           >
-            Rejected Applications
+            <span>Rejected Applications</span>
             {activeTab === 'rejected' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#C41230]" />}
-          </button>
-          <button 
-            onClick={() => { setActiveTab('import'); setPage(1); setSearchParams({ tab: 'import' }); }}
-            className={`pb-4 text-sm font-bold transition-all relative ${
-              activeTab === 'import' ? 'text-[#C41230]' : 'text-[#7A85A0] hover:text-[#0E1525]'
-            }`}
-          >
-            Import Members
-            {activeTab === 'import' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#C41230]" />}
-          </button>
-          <button 
-            onClick={() => { setActiveTab('add'); setPage(1); setSearchParams({ tab: 'add' }); }}
-            className={`pb-4 text-sm font-bold transition-all relative ${
-              activeTab === 'add' ? 'text-[#C41230]' : 'text-[#7A85A0] hover:text-[#0E1525]'
-            }`}
-          >
-            Add Member
-            {activeTab === 'add' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#C41230]" />}
           </button>
         </div>
 
-        {/* Filter Controls Row - Hidden on Add/Import Tabs */}
-        {activeTab !== 'add' && activeTab !== 'import' && (
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
-            <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3.5 top-3.5 text-[#7A85A0]" size={18} />
-                <input
-                  type="text"
-                  placeholder="Search by name, email, business, category, or membership..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm text-[#0E1525] placeholder-[#7A85A0] focus:outline-none focus:border-[#C41230] transition-colors"
-                />
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => {
-                    setCategoryFilter(e.target.value);
-                    setPage(1);
-                  }}
-                  className="bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-3 text-sm text-[#0E1525] font-medium focus:outline-none focus:border-[#C41230] min-w-[160px]"
-                >
-                  <option value="">All Categories</option>
-                  {categories.map((cat, idx) => (
-                    <option key={idx} value={cat}>{cat}</option>
-                  ))}
-                </select>
+        {/* Filter Controls Row (Expanded search input without clipping) */}
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="w-full md:flex-1 relative min-w-0">
+            <Search className="absolute left-3.5 top-3 text-[#7A85A0]" size={18} />
+            <input
+              type="text"
+              placeholder="Search by name, email, phone, business, category, or member ID..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-xs text-[#0E1525] placeholder-[#7A85A0] focus:outline-none focus:border-[#C41230] transition-colors"
+            />
+            {search && (
+              <button 
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
 
-                <button
-                  type="submit"
-                  className="bg-[#C41230] hover:bg-[#9E0E27] text-white font-semibold text-sm px-6 py-3 rounded-xl shadow-lg shadow-[#C41230]/20 transition-all"
-                >
-                  Search
-                </button>
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <select
+              value={categoryFilter}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value);
+                setPage(1);
+              }}
+              className="bg-[#F0F2F7] border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-[#0E1525] font-semibold focus:outline-none focus:border-[#C41230] min-w-[170px]"
+            >
+              <option value="">All Business Categories</option>
+              {categories.map((cat, idx) => (
+                <option key={idx} value={cat}>{cat}</option>
+              ))}
+            </select>
 
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="bg-[#F0F2F7] border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-[#0E1525] font-semibold focus:outline-none focus:border-[#C41230]"
+            >
+              <option value={10}>10 / page</option>
+              <option value={25}>25 / page</option>
+              <option value={50}>50 / page</option>
+              <option value={100}>100 / page</option>
+            </select>
+
+            {(search || categoryFilter) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setCategoryFilter('');
+                }}
+                className="text-xs text-[#C41230] font-bold hover:underline px-2 py-1"
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Batch Operations Toolbar (When rows are selected) */}
+        {selectedIds.length > 0 && (
+          <div className="bg-[#1A2744] text-white rounded-xl p-3 px-5 flex flex-wrap items-center justify-between gap-3 shadow-lg animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 text-xs font-bold">
+              <span className="bg-[#C41230] px-2 py-0.5 rounded-full">{selectedIds.length}</span>
+              <span>Members Selected</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {activeTab === 'pending' && (
                 <button
-                  type="button"
-                  onClick={handleClearFilters}
-                  className="border border-slate-300 hover:bg-slate-100 text-[#1A2744] text-sm px-4 py-3 rounded-xl transition-all font-semibold"
+                  onClick={handleBulkApprove}
+                  disabled={actionLoading}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
                 >
-                  Reset
+                  <CheckCircle size={13} />
+                  <span>Approve Selected</span>
                 </button>
-              </div>
-            </form>
+              )}
+              <button
+                onClick={handleBulkExportCSV}
+                className="px-3 py-1.5 bg-[#243260] hover:bg-[#314380] text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
+              >
+                <Download size={13} />
+                <span>Export Selected</span>
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={actionLoading}
+                className="px-3 py-1.5 bg-rose-600/80 hover:bg-rose-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
+              >
+                <Trash2 size={13} />
+                <span>Delete Selected</span>
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Error Notification */}
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-600 p-4 rounded-xl text-sm font-semibold">
-            {error}
-          </div>
-        )}
-
-        {/* Approved and Rejected Members Tab Tables */}
-        {(activeTab === 'approved' || activeTab === 'rejected') && (
-          <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-[#243260] text-xs font-bold text-white uppercase tracking-wider bg-[#1A2744]">
-                    <th className="py-4 px-6">Photo</th>
-                    <th className="py-4 px-6">Name</th>
-                    <th className="py-4 px-6">Business Detail</th>
-                    <th className="py-4 px-6">Status Badge</th>
-                    {activeTab === 'approved' && <th className="py-4 px-6">Approved Info</th>}
-                    {activeTab === 'rejected' && <th className="py-4 px-6">Reason / Actions</th>}
-                    <th className="py-4 px-6 text-right">Manage</th>
+        {/* Members Roster Table */}
+        <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-[#243260] text-xs font-bold text-white uppercase tracking-wider bg-[#1A2744]">
+                  <th className="py-4 px-4 w-10 text-center">
+                    <input 
+                      type="checkbox"
+                      checked={members.length > 0 && selectedIds.length === members.length}
+                      onChange={toggleSelectAll}
+                      className="rounded text-[#C41230] focus:ring-0 cursor-pointer"
+                    />
+                  </th>
+                  <th className="py-4 px-4">Photo</th>
+                  <th 
+                    className="py-4 px-4 cursor-pointer select-none hover:text-slate-200"
+                    onClick={() => handleSort('full_name')}
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Name & Contact</span>
+                      {sortField === 'full_name' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} className="opacity-40" />}
+                    </div>
+                  </th>
+                  <th 
+                    className="py-4 px-4 cursor-pointer select-none hover:text-slate-200"
+                    onClick={() => handleSort('membership_number')}
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Member ID</span>
+                      {sortField === 'membership_number' ? (sortOrder === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />) : <ArrowUpDown size={12} className="opacity-40" />}
+                    </div>
+                  </th>
+                  <th className="py-4 px-4">Business Profile</th>
+                  <th className="py-4 px-4">Status</th>
+                  
+                  {activeTab === 'approved' && <th className="py-4 px-4">Approved By</th>}
+                  {activeTab === 'rejected' && <th className="py-4 px-4">Rejection Reason</th>}
+                  
+                  <th className="py-4 px-6 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={8} className="py-16 text-center text-[#3A4260] text-xs">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#C41230] mb-2"></div>
+                      <p className="font-semibold">Loading members roster…</p>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-[#3A4260] text-sm">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#C41230] mb-2"></div>
-                        <p>Loading members...</p>
-                      </td>
-                    </tr>
-                  ) : members.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-[#3A4260] text-sm font-medium">
-                        No members matching the criteria were found.
-                      </td>
-                    </tr>
-                  ) : (
-                    members.map((member) => (
+                ) : members.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-16 text-center text-[#3A4260] text-sm font-medium">
+                      No members matching the criteria were found in {activeTab} status.
+                    </td>
+                  </tr>
+                ) : (
+                  members.map((member) => {
+                    const isSelected = selectedIds.includes(member.id);
+                    return (
                       <tr 
                         key={member.id}
-                        onClick={() => openMemberDrawer(member)}
-                        className="group hover:bg-slate-50 cursor-pointer transition-colors"
+                        className={`group hover:bg-slate-50 transition-colors ${isSelected ? 'bg-indigo-50/40' : ''}`}
                       >
-                        <td className="py-4 px-6">
+                        <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input 
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectMember(member.id)}
+                            className="rounded text-[#C41230] focus:ring-0 cursor-pointer"
+                          />
+                        </td>
+
+                        <td className="py-4 px-4 cursor-pointer" onClick={() => openMemberDrawer(member)}>
                           <img 
                             src={getImageUrl(member.profile_image)} 
                             alt={member.full_name || 'Member'}
                             className="w-10 h-10 rounded-full object-cover border border-slate-200 group-hover:border-[#1A2744] transition-colors"
                           />
                         </td>
-                        <td className="py-4 px-6 font-semibold text-[#0E1525] group-hover:text-[#C41230] transition-colors">
-                          {member.full_name || 'Incomplete Profile'}
-                          <p className="text-xs text-[#7A85A0] font-normal">
-                            {member.email || member.phone || 'No contact on file'}
+
+                        <td className="py-4 px-4 cursor-pointer" onClick={() => openMemberDrawer(member)}>
+                          <p className="font-bold text-xs text-[#0E1525] group-hover:text-[#C41230] transition-colors">
+                            {member.full_name || 'Incomplete Profile'}
                           </p>
+                          <p className="text-[11px] text-[#7A85A0] mt-0.5">
+                            {member.email || 'No email on file'}
+                          </p>
+                          {member.phone && (
+                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">{member.phone}</p>
+                          )}
                         </td>
-                        <td className="py-4 px-6 text-sm text-[#3A4260]">
-                          <div className="font-semibold text-[#0E1525]">{member.business_name || 'N/A'}</div>
-                          <div className="text-xs text-[#7A85A0]">{member.business_category || 'N/A'}</div>
+
+                        <td className="py-4 px-4 text-xs font-mono font-bold text-[#1A2744]">
+                          {member.membership_number ? (
+                            <span className="px-2 py-0.5 bg-slate-100 rounded border border-slate-200">
+                              {member.membership_number}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 italic">Unassigned</span>
+                          )}
                         </td>
-                        <td className="py-4 px-6">
-                          {getStatusBadge(member.approval_status)}
+
+                        <td className="py-4 px-4 text-xs text-[#3A4260]">
+                          <div className="font-bold text-[#0E1525] truncate max-w-[180px]">{member.business_name || 'N/A'}</div>
+                          <div className="text-[11px] text-[#7A85A0] truncate max-w-[180px]">{member.business_category || 'N/A'}</div>
                         </td>
+
+                        <td className="py-4 px-4">
+                          {member.approval_status === 'approved' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+                              <CheckCircle size={10} className="mr-1" /> Approved
+                            </span>
+                          )}
+                          {member.approval_status === 'pending' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                              <Clock size={10} className="mr-1" /> Pending
+                            </span>
+                          )}
+                          {member.approval_status === 'rejected' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
+                              <AlertCircle size={10} className="mr-1" /> Rejected
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Masked Foreign Key: Clean formatted Admin name & date */}
                         {activeTab === 'approved' && (
-                          <td className="py-4 px-6 text-xs text-[#7A85A0]">
-                            <div>Approved By ID: {member.approved_by || 'Admin'}</div>
-                            <div>{member.approved_at ? new Date(member.approved_at).toLocaleDateString() : 'N/A'}</div>
+                          <td className="py-4 px-4 text-xs text-[#5A6380]">
+                            <p className="font-semibold text-[#0E1525]">Approved by Admin</p>
+                            <p className="text-[10px] text-slate-400">{formatApproverDate(member.approved_at)}</p>
                           </td>
                         )}
+
+                        {/* Rejected Application Details */}
                         {activeTab === 'rejected' && (
-                          <td className="py-4 px-6 text-xs text-[#7A85A0]" onClick={(e) => e.stopPropagation()}>
-                            <div className="max-w-[200px] truncate text-red-600 font-semibold mb-2" title={member.rejection_reason}>
-                              {member.rejection_reason || 'No reason provided'}
-                            </div>
-                            <button
-                              onClick={() => setMemberToApprove(member)}
-                              className="inline-flex items-center gap-1 bg-[#1A2744]/10 hover:bg-[#1A2744]/20 text-[#1A2744] px-3 py-1.5 rounded-lg border border-[#1A2744]/20 font-bold transition-all text-[11px]"
-                            >
-                              <RotateCcw size={12} />
-                              Restore & Approve
-                            </button>
+                          <td className="py-4 px-4 text-xs text-[#5A6380]">
+                            <p className="text-rose-600 font-semibold truncate max-w-[200px]" title={member.rejection_reason}>
+                              {member.rejection_reason || 'No specific reason'}
+                            </p>
+                            <p className="text-[10px] text-slate-400">{formatApproverDate(member.rejected_at)}</p>
                           </td>
                         )}
-                        <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex justify-end gap-2">
+
+                        {/* Action buttons */}
+                        <td className="py-4 px-6 text-right">
+                          <div className="flex justify-end items-center gap-1.5">
+                            {/* Read-Only Details View CTA */}
                             <button
-                              onClick={() => openMemberEditor(member)}
-                              title="Edit member profile"
-                              aria-label={`Edit ${member.full_name || member.email}`}
-                              className="p-2 rounded-lg border border-slate-200 text-[#1A2744] hover:bg-slate-100 transition-all"
+                              onClick={() => openMemberDrawer(member)}
+                              title="View full member profile details"
+                              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+                            >
+                              <Eye size={14} />
+                            </button>
+
+                            {/* Pending Quick Actions */}
+                            {activeTab === 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => setMemberToApprove(member)}
+                                  title="Approve Member"
+                                  className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                                >
+                                  <ThumbsUp size={14} />
+                                </button>
+                                <button
+                                  onClick={() => setMemberToReject(member)}
+                                  title="Reject Application"
+                                  className="p-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors"
+                                >
+                                  <ThumbsDown size={14} />
+                                </button>
+                              </>
+                            )}
+
+                            {/* Rejected Re-evaluate CTA */}
+                            {activeTab === 'rejected' && (
+                              <button
+                                onClick={() => setMemberToApprove(member)}
+                                title="Re-evaluate & Approve"
+                                className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-[10px] font-bold transition-colors flex items-center gap-1"
+                              >
+                                <RotateCcw size={11} />
+                                <span>Re-evaluate</span>
+                              </button>
+                            )}
+
+                            {/* Edit Profile */}
+                            <button
+                              onClick={() => setMemberToEdit(member)}
+                              title="Edit Member Information"
+                              className="p-1.5 rounded-lg border border-slate-200 text-[#1A2744] hover:bg-slate-100 transition-colors"
                             >
                               <Pencil size={14} />
                             </button>
+
+                            {/* Delete Record */}
                             <button
                               onClick={() => setMemberToDelete(member)}
-                              title="Delete member"
-                              aria-label={`Delete ${member.full_name || member.email}`}
-                              className="p-2 rounded-lg border border-[#C41230]/30 text-[#C41230] hover:bg-[#C41230]/10 transition-all"
+                              title="Delete Member"
+                              className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
                             >
                               <Trash2 size={14} />
                             </button>
                           </div>
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {/* Pagination Footer */}
-            {!isLoading && totalPages > 1 && (
-              <div className="flex justify-between items-center px-6 py-4 border-t border-slate-200 bg-[#F0F2F7] text-sm">
-                <span className="text-[#3A4260]">
-                  Showing Page <span className="text-[#0E1525] font-bold">{page}</span> of <span className="text-[#0E1525] font-bold">{totalPages}</span>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Bar */}
+          {!isLoading && total > 0 && (
+            <div className="flex flex-col sm:flex-row justify-between items-center px-6 py-4 border-t border-slate-200 bg-[#F8FAFC] text-xs text-[#5A6380] gap-4">
+              <div>
+                Showing <span className="font-bold text-[#0E1525]">{(page - 1) * pageSize + 1}</span> to{' '}
+                <span className="font-bold text-[#0E1525]">{Math.min(page * pageSize, total)}</span> of{' '}
+                <span className="font-bold text-[#0E1525]">{total}</span> members
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-2 border border-slate-300 hover:bg-white text-[#1A2744] rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+                <span className="px-3 font-semibold text-[#0E1525]">
+                  Page {page} of {totalPages}
                 </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    className="p-2 border border-slate-300 hover:bg-white text-[#1A2744] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <button
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
-                    className="p-2 border border-slate-300 hover:bg-white text-[#1A2744] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Pending Approval Tab Cards */}
-        {activeTab === 'pending' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {isLoading ? (
-              <div className="col-span-full py-12 text-center text-[#3A4260] text-sm">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#C41230] mb-2"></div>
-                <p>Loading pending reviews...</p>
-              </div>
-            ) : members.length === 0 ? (
-              <div className="col-span-full py-12 text-center text-[#3A4260] text-sm bg-white border border-slate-200 shadow-sm rounded-2xl font-medium">
-                No pending registrations require review.
-              </div>
-            ) : (
-              members.map((member) => (
-                <div 
-                  key={member.id}
-                  className="bg-white border border-slate-200/80 rounded-2xl p-5 flex flex-col justify-between hover:border-[#1A2744]/30 transition-all hover:shadow-md"
-                >
-                  <div className="space-y-4">
-                    {/* Member Top Info Card */}
-                    <div className="flex items-center space-x-3.5">
-                      <img 
-                        src={getImageUrl(member.profile_image)} 
-                        alt={member.full_name} 
-                        className="w-12 h-12 rounded-full object-cover border border-slate-200"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <h4 className="font-bold text-[#0E1525] truncate text-base">{member.full_name || 'Incomplete Profile'}</h4>
-                        <p className="text-xs text-[#7A85A0] truncate">
-                          {member.email || member.phone || 'No contact on file'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Meta Fields */}
-                    <div className="bg-[#F0F2F7] p-3.5 border border-slate-200/60 rounded-xl space-y-2 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-[#7A85A0] font-bold uppercase text-[9px]">Business</span>
-                        <span className="text-[#0E1525] truncate max-w-[150px] font-semibold">{member.business_name || 'None'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-[#7A85A0] font-bold uppercase text-[9px]">Category</span>
-                        <span className="text-[#0E1525] font-semibold">{member.business_category || 'None'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-[#7A85A0] font-bold uppercase text-[9px]">Submitted</span>
-                        <span className="text-[#3A4260] font-mono">{new Date(member.created_at).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions Row */}
-                  <div className="flex gap-2.5 mt-5">
-                    <button
-                      onClick={() => openMemberDrawer(member)}
-                      className="flex-1 border border-slate-300 hover:bg-slate-100 text-[#1A2744] font-semibold text-xs py-2.5 rounded-xl transition-all"
-                    >
-                      View Profile
-                    </button>
-                    <button
-                      onClick={() => setMemberToApprove(member)}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all"
-                    >
-                      <ThumbsUp size={13} />
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => setMemberToReject(member)}
-                      className="flex-1 bg-[#C41230] hover:bg-[#9E0E27] text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all"
-                    >
-                      <ThumbsDown size={13} />
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Add Member Tab Form */}
-        {activeTab === 'add' && (
-          <div className="bg-white border border-slate-200/80 shadow-sm rounded-2xl p-6 md:p-8 max-w-4xl mx-auto">
-            <h2 className="text-xl font-bold text-[#0E1525] mb-6">Add New Club Member</h2>
-            {manualSuccess && (
-              <div className="mb-6 bg-emerald-100 border border-emerald-300 text-emerald-800 p-4 rounded-xl text-sm font-semibold">
-                {manualSuccess}
-              </div>
-            )}
-            <form onSubmit={handleManualSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Basic Information */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-[#1A2744] uppercase tracking-wider">Basic Information</h3>
-                  
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Full Name *</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={manualForm.full_name}
-                      onChange={e => setManualForm({...manualForm, full_name: e.target.value})}
-                      className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Email *</label>
-                    <input 
-                      type="email" 
-                      required
-                      value={manualForm.email}
-                      onChange={e => setManualForm({...manualForm, email: e.target.value})}
-                      className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Mobile Number</label>
-                    <input 
-                      type="text" 
-                      value={manualForm.phone}
-                      onChange={e => setManualForm({...manualForm, phone: e.target.value})}
-                      className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Membership Number *</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={manualForm.membership_number}
-                      onChange={e => setManualForm({...manualForm, membership_number: e.target.value})}
-                      className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Designation</label>
-                    <input 
-                      type="text" 
-                      value={manualForm.designation}
-                      onChange={e => setManualForm({...manualForm, designation: e.target.value})}
-                      className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                    />
-                  </div>
-                </div>
-
-                {/* Business Information */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-bold text-[#1A2744] uppercase tracking-wider">Business & Listing details</h3>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Business Name *</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={manualForm.business_name}
-                      onChange={e => setManualForm({...manualForm, business_name: e.target.value})}
-                      className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Business Category *</label>
-                    <select 
-                      required
-                      value={manualForm.business_category}
-                      onChange={e => setManualForm({...manualForm, business_category: e.target.value})}
-                      className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                    >
-                      <option value="">Select Category</option>
-                      {Array.from(new Set([...PRESET_CATEGORIES, ...categories])).map((cat, idx) => (
-                        <option key={idx} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {manualForm.business_category === 'Others' && (
-                    <div className="space-y-1">
-                      <label className="text-xs text-[#3A4260] font-semibold">Specify Custom Category *</label>
-                      <input 
-                        type="text" 
-                        required
-                        placeholder="Enter custom category"
-                        value={customCategoryInput}
-                        onChange={e => setCustomCategoryInput(e.target.value)}
-                        className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                      />
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-[#7A85A0] font-bold uppercase">City</label>
-                      <input 
-                        type="text" 
-                        value={manualForm.city}
-                        onChange={e => setManualForm({...manualForm, city: e.target.value})}
-                        className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-3 py-2 text-xs text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-[#7A85A0] font-bold uppercase">State</label>
-                      <input 
-                        type="text" 
-                        value={manualForm.state}
-                        onChange={e => setManualForm({...manualForm, state: e.target.value})}
-                        className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-3 py-2 text-xs text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-[#7A85A0] font-bold uppercase">Country</label>
-                      <input 
-                        type="text" 
-                        value={manualForm.country}
-                        onChange={e => setManualForm({...manualForm, country: e.target.value})}
-                        className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-3 py-2 text-xs text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs text-[#3A4260] font-semibold">Visibility Status</label>
-                      <select 
-                        value={manualForm.status}
-                        onChange={e => setManualForm({...manualForm, status: e.target.value})}
-                        className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-[#0E1525] focus:outline-none"
-                      >
-                        <option value="active">Active (Visible)</option>
-                        <option value="inactive">Inactive (Hidden)</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-[#3A4260] font-semibold">Approval Status</label>
-                      <select 
-                        value={manualForm.approval_status}
-                        onChange={e => setManualForm({...manualForm, approval_status: e.target.value})}
-                        className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-[#0E1525] focus:outline-none"
-                      >
-                        <option value="approved">Approved (Verified)</option>
-                        <option value="pending">Pending Approval</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-4 border-t border-slate-200">
                 <button
-                  type="submit"
-                  disabled={actionLoading}
-                  className="bg-[#C41230] hover:bg-[#9E0E27] disabled:opacity-50 text-white font-bold text-sm px-8 py-3 rounded-xl shadow-lg shadow-[#C41230]/20 transition-all flex items-center gap-2"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-2 border border-slate-300 hover:bg-white text-[#1A2744] rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
-                  <Plus size={16} />
-                  {actionLoading ? 'Saving Record...' : 'Create Member Account'}
+                  <ChevronRight size={15} />
                 </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Import Members Tab Spreadsheets Console */}
-        {activeTab === 'import' && (
-          <div className="space-y-6 max-w-4xl mx-auto">
-            {/* Guidelines Card */}
-            <div className="bg-white border border-slate-200/80 shadow-sm rounded-2xl p-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                <div>
-                  <h3 className="text-lg font-bold text-[#0E1525] flex items-center gap-2">
-                    <Download size={18} className="text-[#C41230]" />
-                    Excel & Spreadsheet Guidelines
-                  </h3>
-                  <p className="text-xs text-[#3A4260] mt-1 font-medium">Ensure format match before uploading rosters.</p>
-                </div>
-                <button 
-                  onClick={downloadTemplate}
-                  className="bg-[#1A2744]/10 border border-[#1A2744]/20 hover:bg-[#1A2744]/20 text-[#1A2744] font-bold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5"
-                >
-                  <Download size={14} />
-                  Download Import Template
-                </button>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-[#3A4260] leading-relaxed border-t border-slate-200 pt-4">
-                <div>
-                  <span className="font-bold text-[#0E1525] block mb-1">Supported Formats</span>
-                  <p>CSV, XLS, XLSX — max 10 MB, up to 5,000 rows.</p>
-                </div>
-                <div>
-                  <span className="font-bold text-[#0E1525] block mb-1">Required Columns</span>
-                  <p>
-                    <strong>Full Name</strong> and <strong>Mobile Number</strong> are required.
-                    Email, Business Name, Nature of Business, Industry Category, Business Address,
-                    City, Instagram, Facebook, LinkedIn and Designation are optional.
-                  </p>
-                </div>
-                <div className="md:col-span-2 bg-[#F0F2F7] border border-slate-200 rounded-xl p-3">
-                  <span className="font-bold text-[#0E1525] block mb-1">All-or-nothing imports</span>
-                  <p>
-                    Every row is validated before anything is written. If any row fails, nothing is
-                    imported — download the error report, fix the rows, and upload again.
-                  </p>
-                </div>
               </div>
             </div>
+          )}
+        </div>
 
-            {/* Upload Area */}
-            {!importReport && (
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-10 flex flex-col items-center justify-center border-dashed border-2 hover:border-[#1A2744] transition-all shadow-sm">
-                <Upload size={48} className="text-[#7A85A0] mb-4" />
-                <span className="font-bold text-[#0E1525] text-sm">Upload Spreadsheet File</span>
-                <span className="text-xs text-[#7A85A0] mt-1 mb-6">Select a .csv, .xls, or .xlsx file to preview</span>
-                
-                <input 
-                  id="excel-file-input"
-                  type="file" 
-                  accept=".csv, .xls, .xlsx"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => document.getElementById('excel-file-input')?.click()}
-                  className="bg-[#C41230] hover:bg-[#9E0E27] text-white font-bold text-sm px-8 py-3 rounded-xl shadow-lg shadow-[#C41230]/20 transition-all"
-                >
-                  Choose File
-                </button>
-              </div>
-            )}
-
-            {/* Validation Report & Preview */}
-            {importReport && (
-              <div className="space-y-6">
-                {/* Summary banner */}
-                <div
-                  className={`p-4 rounded-xl text-sm font-semibold border ${
-                    importReport.summary.errors > 0
-                      ? 'bg-red-50 border-red-200 text-red-700'
-                      : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                  }`}
-                >
-                  {importReport.summary.valid} rows valid, {importReport.summary.errors} rows with errors.
-                  {importReport.summary.errors > 0
-                    ? ' Fix the highlighted rows and upload again — nothing has been imported.'
-                    : ' Review the preview below and confirm to commit.'}
-                </div>
-
-                {/* Summary cards */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
-                    <span className="text-[10px] text-[#7A85A0] font-bold uppercase">Total Rows</span>
-                    <p className="text-2xl font-bold text-[#0E1525] mt-1">{importReport.summary.total}</p>
-                  </div>
-                  <div className="bg-white border border-slate-200 p-4 rounded-xl border-l-4 border-l-emerald-500 shadow-sm">
-                    <span className="text-[10px] text-[#7A85A0] font-bold uppercase">Valid</span>
-                    <p className="text-2xl font-bold text-emerald-700 mt-1">{importReport.summary.valid}</p>
-                  </div>
-                  <div className="bg-white border border-slate-200 p-4 rounded-xl border-l-4 border-l-red-500 shadow-sm">
-                    <span className="text-[10px] text-[#7A85A0] font-bold uppercase">Errors</span>
-                    <p className="text-2xl font-bold text-red-600 mt-1">{importReport.summary.errors}</p>
-                  </div>
-                  <div className="bg-white border border-slate-200 p-4 rounded-xl border-l-4 border-l-[#1A2744] shadow-sm">
-                    <span className="text-[10px] text-[#7A85A0] font-bold uppercase">Will Create</span>
-                    <p className="text-2xl font-bold text-[#1A2744] mt-1">{importReport.summary.toCreate}</p>
-                  </div>
-                  <div className="bg-white border border-slate-200 p-4 rounded-xl border-l-4 border-l-amber-500 shadow-sm">
-                    <span className="text-[10px] text-[#7A85A0] font-bold uppercase">
-                      {importMode === 'create_update' ? 'Will Update' : 'Will Skip'}
-                    </span>
-                    <p className="text-2xl font-bold text-amber-700 mt-1">
-                      {importMode === 'create_update'
-                        ? importReport.summary.toUpdate
-                        : importReport.summary.toSkip}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Import mode */}
-                <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
-                  <div>
-                    <span className="font-bold text-sm text-[#0E1525]">Import Mode</span>
-                    <p className="text-xs text-[#3A4260] mt-1 font-medium">
-                      Existing members are matched by mobile number.
-                    </p>
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleModeChange('create_only')}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                        importMode === 'create_only'
-                          ? 'bg-[#C41230] text-white shadow-md'
-                          : 'bg-[#F0F2F7] text-[#1A2744] hover:bg-slate-200 border border-slate-200'
-                      }`}
-                    >
-                      Create Only
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleModeChange('create_update')}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                        importMode === 'create_update'
-                          ? 'bg-[#C41230] text-white shadow-md'
-                          : 'bg-[#F0F2F7] text-[#1A2744] hover:bg-slate-200 border border-slate-200'
-                      }`}
-                    >
-                      Create &amp; Update
-                    </button>
-                  </div>
-                </div>
-
-                {/* Preview table */}
-                <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
-                  <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-[#F0F2F7]">
-                    <span className="font-bold text-xs text-[#0E1525]">Preview Before Commit</span>
-                    <span className="text-[10px] text-[#7A85A0]">
-                      Showing first 100 of {importReport.summary.total} rows
-                    </span>
-                  </div>
-                  <div className="overflow-x-auto max-h-96">
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead className="sticky top-0">
-                        <tr className="border-b border-[#243260] font-bold text-white uppercase bg-[#1A2744]">
-                          <th className="py-3 px-4">Row</th>
-                          <th className="py-3 px-4">Full Name</th>
-                          <th className="py-3 px-4">Mobile</th>
-                          <th className="py-3 px-4">Email</th>
-                          <th className="py-3 px-4">Business</th>
-                          <th className="py-3 px-4">Action</th>
-                          <th className="py-3 px-4">Errors</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {importReport.rows.slice(0, 100).map((row) => (
-                          <tr
-                            key={row.rowNumber}
-                            className={row.errors.length > 0 ? 'bg-red-50/60' : 'hover:bg-slate-50'}
-                          >
-                            <td className="py-3 px-4 font-mono text-[#7A85A0]">{row.rowNumber}</td>
-                            <td className="py-3 px-4 text-[#0E1525] font-semibold">
-                              {row.full_name || <span className="text-red-500 italic">Missing</span>}
-                            </td>
-                            <td className="py-3 px-4 font-mono text-[#3A4260]">
-                              {row.phone || <span className="text-red-500 italic">Missing</span>}
-                            </td>
-                            <td className="py-3 px-4 text-[#3A4260]">{row.email || '—'}</td>
-                            <td className="py-3 px-4 text-[#3A4260]">{row.business_name || '—'}</td>
-                            <td className="py-3 px-4">
-                              {row.errors.length > 0 ? (
-                                <span className="inline-flex px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 font-bold text-[9px]">
-                                  Error
-                                </span>
-                              ) : row.action === 'create' ? (
-                                <span className="inline-flex px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[9px]">
-                                  Create
-                                </span>
-                              ) : row.action === 'update' ? (
-                                <span className="inline-flex px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 font-bold text-[9px]">
-                                  Update
-                                </span>
-                              ) : (
-                                <span className="inline-flex px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300 font-bold text-[9px]">
-                                  Skip
-                                </span>
-                              )}
-                            </td>
-                            <td
-                              className="py-3 px-4 text-red-600 max-w-[260px] truncate"
-                              title={row.errors.join(' ')}
-                            >
-                              {row.errors.join(' ') || <span className="text-[#7A85A0]">—</span>}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="px-6 py-4 border-t border-slate-200 bg-[#F0F2F7] flex flex-wrap justify-end gap-3">
-                    <button
-                      onClick={resetImport}
-                      className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-[#1A2744] hover:bg-white"
-                    >
-                      Cancel / Reset
-                    </button>
-                    {importReport.summary.errors > 0 && (
-                      <button
-                        onClick={downloadErrorReport}
-                        className="px-4 py-2 border border-[#C41230]/30 text-[#C41230] rounded-xl text-xs font-bold hover:bg-[#C41230]/10 flex items-center gap-1.5"
-                      >
-                        <Download size={14} />
-                        Download Error Report
-                      </button>
-                    )}
-                    <button
-                      onClick={handleBulkImportSubmit}
-                      disabled={actionLoading || importReport.summary.errors > 0}
-                      className="bg-[#C41230] hover:bg-[#9E0E27] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs px-6 py-2 rounded-xl shadow-lg"
-                    >
-                      {actionLoading
-                        ? 'Committing Import...'
-                        : `Confirm Import (${importReport.summary.toCreate} new, ${
-                            importMode === 'create_update'
-                              ? `${importReport.summary.toUpdate} updated`
-                              : `${importReport.summary.toSkip} skipped`
-                          })`}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {importSuccess && (
-              <div className="bg-emerald-100 border border-emerald-300 text-emerald-800 p-4 rounded-xl text-sm font-semibold">
-                {importSuccess}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Member Details Sliding Drawer */}
+        {/* Read-Only Profile View Details Drawer */}
         {isDrawerOpen && selectedMember && (
-          <div className="fixed inset-0 z-50 overflow-hidden">
-            <div 
-              className="absolute inset-0 bg-[#111B30]/80 backdrop-blur-sm transition-opacity"
-              onClick={() => setIsDrawerOpen(false)}
-            />
-            <div className="absolute inset-y-0 right-0 max-w-full flex">
-              <div className="w-screen max-w-xl bg-white border-l border-slate-200 text-[#0E1525] flex flex-col justify-between shadow-2xl relative">
+          <div className="fixed inset-0 z-50 overflow-hidden bg-[#111B30]/80 backdrop-blur-sm animate-in fade-in duration-150 flex justify-end">
+            <div className="w-full max-w-xl bg-white h-full overflow-y-auto shadow-2xl flex flex-col justify-between">
+              <div>
                 {/* Drawer Header */}
-                <div className="p-6 border-b border-slate-200 bg-[#1A2744] text-white flex justify-between items-center">
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Member Profile Details</h2>
-                    <p className="text-xs text-slate-300 mt-1 font-medium">Verify business listing & uploads details.</p>
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-[#1A2744] text-white">
+                  <div className="flex items-center gap-3">
+                    <img 
+                      src={getImageUrl(selectedMember.profile_image)} 
+                      alt={selectedMember.full_name || 'Member'}
+                      className="w-12 h-12 rounded-full object-cover border-2 border-white/40"
+                    />
+                    <div>
+                      <h2 className="font-extrabold text-base text-white">{selectedMember.full_name || 'Incomplete Profile'}</h2>
+                      <p className="text-xs text-slate-300">{selectedMember.email || selectedMember.phone}</p>
+                    </div>
                   </div>
                   <button 
                     onClick={() => setIsDrawerOpen(false)}
-                    className="p-2 text-slate-300 hover:text-white hover:bg-[#243260] rounded-xl transition-all"
+                    className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-[#243260]"
                   >
                     <X size={20} />
                   </button>
                 </div>
 
-                {/* Drawer Body Scroll */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-[#F0F2F7]">
-                  {/* Top Header Card */}
-                  <div className="flex items-center space-x-4 bg-white p-4 border border-slate-200 rounded-2xl shadow-sm">
-                    <img 
-                      src={getImageUrl(selectedMember.profile_image)} 
-                      alt={selectedMember.full_name} 
-                      className="w-20 h-20 rounded-full object-cover border border-slate-200"
-                    />
+                {/* Drawer Content */}
+                <div className="p-6 space-y-6 text-xs text-[#0E1525]">
+                  {/* Status Banner */}
+                  <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
                     <div>
-                      <h3 className="text-xl font-extrabold text-[#0E1525]">{selectedMember.full_name || 'Incomplete Profile'}</h3>
-                      <p className="text-sm text-[#C41230] font-bold">{selectedMember.designation || 'Club Member'}</p>
-                      <div className="mt-2 flex gap-2">
-                        {getStatusBadge(selectedMember.approval_status)}
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-[#1A2744] text-white border border-[#243260]">
-                          {selectedMember.role}
-                        </span>
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Verification Status</span>
+                      <p className="font-bold text-sm capitalize mt-0.5 text-[#1A2744]">{selectedMember.approval_status}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Membership Number</span>
+                      <p className="font-mono font-bold text-sm mt-0.5 text-[#C41230]">{selectedMember.membership_number || 'Unassigned'}</p>
+                    </div>
+                  </div>
+
+                  {/* Contact Information */}
+                  <div>
+                    <h3 className="text-xs font-bold text-[#1A2744] uppercase tracking-wider mb-3">Contact & Identification</h3>
+                    <div className="grid grid-cols-2 gap-3 bg-[#F8FAFC] p-4 rounded-xl border border-slate-200">
+                      <div>
+                        <p className="text-slate-400 font-medium">Primary Mobile</p>
+                        <p className="font-bold text-[#0E1525] mt-0.5">{selectedMember.phone || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 font-medium">Alternate Mobile</p>
+                        <p className="font-bold text-[#0E1525] mt-0.5">{selectedMember.alternate_phone || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 font-medium">Contact Email</p>
+                        <p className="font-bold text-[#0E1525] mt-0.5">{selectedMember.contact_email || selectedMember.email || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 font-medium">Designation</p>
+                        <p className="font-bold text-[#0E1525] mt-0.5">{selectedMember.designation || 'Member'}</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Contact Credentials */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-extrabold text-[#1A2744] uppercase tracking-wider flex items-center gap-2">
-                      <UserIcon size={14} className="text-[#C41230]" />
-                      Contact & Club Credentials
-                    </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 border border-slate-200 rounded-xl shadow-sm">
+                  {/* Business Details */}
+                  <div>
+                    <h3 className="text-xs font-bold text-[#1A2744] uppercase tracking-wider mb-3">Business Enterprise</h3>
+                    <div className="bg-[#F8FAFC] p-4 rounded-xl border border-slate-200 space-y-2">
                       <div>
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Email Address</span>
-                        <span className="text-sm font-semibold text-[#0E1525] flex items-center mt-1">
-                          <Mail size={12} className="mr-1.5 text-[#7A85A0]" />
-                          {selectedMember.email || 'Not Provided'}
-                        </span>
+                        <p className="text-slate-400 font-medium">Business Name</p>
+                        <p className="font-bold text-sm text-[#0E1525] mt-0.5">{selectedMember.business_name || 'N/A'}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Phone Number</span>
-                        <span className="text-sm font-semibold text-[#0E1525] flex items-center mt-1">
-                          <Phone size={12} className="mr-1.5 text-[#7A85A0]" />
-                          {selectedMember.phone || 'Not Provided'}
-                        </span>
+                        <p className="text-slate-400 font-medium">Category</p>
+                        <p className="font-semibold text-[#0E1525] mt-0.5">{selectedMember.business_category || 'N/A'}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Membership ID Number</span>
-                        <span className="text-sm font-mono font-bold text-[#1A2744] flex items-center mt-1">
-                          <CreditCard size={12} className="mr-1.5 text-[#7A85A0]" />
-                          {selectedMember.membership_number || 'N/A'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Location (Address)</span>
-                        <span className="text-sm font-semibold text-[#0E1525] flex items-center mt-1">
-                          <MapPin size={12} className="mr-1.5 text-[#7A85A0]" />
+                        <p className="text-slate-400 font-medium">Location</p>
+                        <p className="font-semibold text-[#0E1525] mt-0.5">
                           {[selectedMember.city, selectedMember.state, selectedMember.country].filter(Boolean).join(', ') || 'N/A'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Business Profile */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-extrabold text-[#1A2744] uppercase tracking-wider flex items-center gap-2">
-                      <Building size={14} className="text-[#C41230]" />
-                      Business Professional Details
-                    </h4>
-                    <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Company Name</span>
-                          <span className="text-sm font-bold text-[#0E1525] mt-1 block">
-                            {selectedMember.business_name || 'N/A'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Industry Category</span>
-                          <span className="text-sm font-semibold text-[#3A4260] mt-1 block">
-                            {selectedMember.business_category || 'N/A'}
-                          </span>
-                        </div>
-                        <div className="sm:col-span-2">
-                          <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Website URL</span>
-                          {selectedMember.website ? (
-                            <a 
-                              href={selectedMember.website.startsWith('http') ? selectedMember.website : `https://${selectedMember.website}`}
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-sm font-bold text-[#C41230] hover:underline flex items-center mt-1"
-                            >
-                              <Globe size={12} className="mr-1.5" />
-                              {selectedMember.website}
-                            </a>
-                          ) : (
-                            <span className="text-sm text-[#7A85A0] block mt-1">None Provided</span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Business Description</span>
-                        <p className="text-sm text-[#3A4260] mt-1.5 leading-relaxed bg-[#F0F2F7] p-3 rounded-lg border border-slate-200">
-                          {selectedMember.business_description || 'No business description provided.'}
                         </p>
                       </div>
+                      {selectedMember.business_description && (
+                        <div>
+                          <p className="text-slate-400 font-medium">Description</p>
+                          <p className="text-slate-700 mt-0.5 leading-relaxed">{selectedMember.business_description}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Club Accomplishments & Awards */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-extrabold text-[#1A2744] uppercase tracking-wider flex items-center gap-2">
-                      <Star size={14} className="text-[#C41230]" />
-                      Club Accomplishments &amp; Awards
-                    </h4>
-                    <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm space-y-2">
-                      {selectedMember.achievements && selectedMember.achievements.length > 0 ? (
-                        selectedMember.achievements.map((item) => (
-                          <div
-                            key={item.id}
-                            className="flex items-center gap-3 bg-[#FFFBF2] border border-[#F5E4C3] rounded-lg px-3 py-2.5"
-                          >
+                  {/* Visiting Card / Identity Assets */}
+                  {selectedMember.visiting_card && (
+                    <div>
+                      <h3 className="text-xs font-bold text-[#1A2744] uppercase tracking-wider mb-3">Identity Proof &amp; Visiting Card</h3>
+                      <div className="border border-slate-200 rounded-xl overflow-hidden p-2 bg-slate-50">
+                        <img 
+                          src={getImageUrl(selectedMember.visiting_card)} 
+                          alt="Visiting Card" 
+                          className="w-full h-48 object-contain rounded-lg bg-white border"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Achievements */}
+                  {selectedMember.achievements && selectedMember.achievements.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-bold text-[#1A2744] uppercase tracking-wider mb-3">Cricket &amp; Club Achievements</h3>
+                      <div className="space-y-2">
+                        {selectedMember.achievements.map((ach, i) => (
+                          <div key={i} className="flex items-center gap-2 p-2.5 bg-amber-50/50 border border-amber-200/60 rounded-xl">
                             <Star size={14} className="text-amber-500 shrink-0" />
-                            <span className="text-sm font-semibold text-[#0E1525] flex-1">
-                              {item.title}
-                            </span>
-                            {item.year && (
-                              <span className="text-xs text-[#7A85A0] font-mono">{item.year}</span>
-                            )}
+                            <span className="font-semibold text-[#0E1525]">{ach.title}</span>
+                            {ach.year && <span className="text-slate-400 font-mono text-[10px]">({ach.year})</span>}
                           </div>
-                        ))
-                      ) : (
-                        <p className="text-xs text-[#7A85A0] italic py-2">
-                          No accomplishments added by this member.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Contact & Social Links */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-extrabold text-[#1A2744] uppercase tracking-wider flex items-center gap-2">
-                      <Globe size={14} className="text-[#C41230]" />
-                      Contact &amp; Social Links
-                    </h4>
-                    <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {([
-                        { label: 'Alternate Phone', value: selectedMember.alternate_phone, key: 'alternate_phone', icon: <Phone size={12} /> },
-                        { label: 'Contact Email', value: selectedMember.contact_email, key: 'contact_email', icon: <Mail size={12} /> },
-                        { label: 'Instagram', value: selectedMember.instagram_url, key: 'instagram_url', icon: <Instagram size={12} /> },
-                        { label: 'Facebook', value: selectedMember.facebook_url, key: 'facebook_url', icon: <Facebook size={12} /> },
-                        { label: 'LinkedIn', value: selectedMember.linkedin_url, key: 'linkedin_url', icon: <Linkedin size={12} /> },
-                      ] as const).map((row) => {
-                        const hidden = selectedMember.privacy_settings?.[row.key] === 'hidden';
-                        return (
-                          <div key={row.key}>
-                            <span className="text-[10px] text-[#7A85A0] font-bold uppercase flex items-center gap-1.5">
-                              {row.label}
-                              {hidden && (
-                                <span className="inline-flex items-center gap-1 text-[9px] text-[#7A85A0] bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-full">
-                                  <EyeOff size={9} />
-                                  Hidden
-                                </span>
-                              )}
-                            </span>
-                            <span className="text-sm font-semibold text-[#0E1525] flex items-center gap-1.5 mt-1 break-all">
-                              <span className="text-[#7A85A0]">{row.icon}</span>
-                              {row.value || 'Not provided'}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Uploaded Assets */}
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-extrabold text-[#1A2744] uppercase tracking-wider">
-                      Business Verification Cards & Assets
-                    </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Logo */}
-                      <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm">
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase block mb-2">Corporate Logo</span>
-                        {selectedMember.business_logo ? (
-                          <img 
-                            src={getImageUrl(selectedMember.business_logo)} 
-                            alt="Business Logo" 
-                            className="w-full h-32 object-contain bg-[#F0F2F7] border border-slate-200 rounded-lg p-2"
-                          />
-                        ) : (
-                          <div className="h-32 rounded-lg bg-[#F0F2F7] border border-slate-200 flex items-center justify-center text-xs text-[#7A85A0] italic">
-                            No Logo Uploaded
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Visiting Card */}
-                      <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm">
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase block mb-2">Visiting Card</span>
-                        {getVisitingCards(selectedMember.visiting_card).length > 0 ? (
-                          <div className="space-y-2">
-                            {getVisitingCards(selectedMember.visiting_card).map((cardPath, cIdx) => (
-                              <img 
-                                key={cIdx}
-                                src={getImageUrl(cardPath)} 
-                                alt={`Visiting Card ${cIdx + 1}`} 
-                                className="w-full h-32 object-cover bg-[#F0F2F7] border border-slate-200 rounded-lg"
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="h-32 rounded-lg bg-[#F0F2F7] border border-slate-200 flex items-center justify-center text-xs text-[#7A85A0] italic">
-                            No Card Uploaded
-                          </div>
-                        )}
+                        ))}
                       </div>
                     </div>
-
-                    {/* Showcase Images */}
-                    <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm">
-                      <span className="text-[10px] text-[#7A85A0] font-bold uppercase block mb-3">Product / Business Images</span>
-                      {selectedMember.business_images && selectedMember.business_images.length > 0 ? (
-                        <div className="grid grid-cols-3 gap-2">
-                          {selectedMember.business_images.map((imgPath, imgIdx) => (
-                            <img 
-                              key={imgIdx}
-                              src={getImageUrl(imgPath)} 
-                              alt={`Business Image ${imgIdx + 1}`} 
-                              className="w-full h-20 object-cover bg-[#F0F2F7] border border-slate-200 rounded-lg"
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="py-6 text-center text-xs text-[#7A85A0] italic">
-                          No business showcase images uploaded.
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Business Flyers */}
-                    <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase flex items-center gap-1.5">
-                          <ImageIcon size={12} />
-                          Business Flyers
-                        </span>
-                        <span className="text-[10px] font-bold text-[#C41230]">
-                          {(selectedMember.business_flyers || []).length} / 5
-                        </span>
-                      </div>
-                      {(selectedMember.business_flyers || []).length > 0 ? (
-                        <div className="grid grid-cols-2 gap-3">
-                          {(selectedMember.business_flyers || []).map((flyer) => (
-                            <div
-                              key={flyer.id}
-                              className="relative group rounded-lg overflow-hidden border border-slate-200 bg-[#F0F2F7]"
-                            >
-                              <img
-                                src={getImageUrl(flyer.image_url)}
-                                alt={`Business Flyer ${flyer.display_order + 1}`}
-                                className="w-full h-28 object-cover"
-                              />
-                              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 flex gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                <a
-                                  href={getImageUrl(flyer.image_url)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex-1 bg-white/90 hover:bg-white text-[#1A2744] text-[10px] font-bold py-1.5 rounded-md text-center"
-                                >
-                                  View
-                                </a>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    downloadImage(
-                                      flyer.image_url,
-                                      `flyer-${selectedMember.id}-${flyer.id}.jpg`,
-                                    )
-                                  }
-                                  className="flex-1 bg-white/90 hover:bg-white text-[#1A2744] text-[10px] font-bold py-1.5 rounded-md flex items-center justify-center gap-1"
-                                >
-                                  <Download size={10} />
-                                  Save
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={actionLoading}
-                                  onClick={() => handleDeleteBusinessFlyer(flyer.id)}
-                                  className="flex-1 bg-[#C41230] hover:bg-[#9E0E27] text-white text-[10px] font-bold py-1.5 rounded-md flex items-center justify-center gap-1 disabled:opacity-60"
-                                >
-                                  <Trash2 size={10} />
-                                  Delete
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="py-6 text-center text-xs text-[#7A85A0] italic">
-                          No business flyers uploaded.
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </div>
+              </div>
 
-                {/* Drawer Footer Actions */}
-                <div className="p-6 border-t border-slate-200 bg-white flex justify-between items-center">
-                  <div className="flex gap-2">
-                    {selectedMember.approval_status === 'pending' && (
-                      <>
-                        <button
-                          onClick={() => setMemberToApprove(selectedMember)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-5 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all"
-                        >
-                          <ThumbsUp size={14} />
-                          Approve Profile
-                        </button>
-                        <button
-                          onClick={() => setMemberToReject(selectedMember)}
-                          className="bg-[#C41230] hover:bg-[#9E0E27] text-white font-bold text-sm px-5 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all"
-                        >
-                          <ThumbsDown size={14} />
-                          Reject Profile
-                        </button>
-                      </>
-                    )}
-                    {selectedMember.approval_status === 'rejected' && (
+              {/* Drawer Footer Actions */}
+              <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    setIsDrawerOpen(false);
+                    setMemberToEdit(selectedMember);
+                  }}
+                  className="px-4 py-2 bg-white border border-slate-300 text-[#1A2744] font-bold text-xs rounded-xl hover:bg-slate-100 transition-colors"
+                >
+                  Edit Profile
+                </button>
+
+                <div className="flex items-center gap-2">
+                  {selectedMember.approval_status === 'pending' && (
+                    <>
                       <button
-                        onClick={() => setMemberToApprove(selectedMember)}
-                        className="bg-[#1A2744] hover:bg-[#111B30] text-white font-bold text-sm px-5 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all"
+                        onClick={() => {
+                          setMemberToReject(selectedMember);
+                        }}
+                        className="px-4 py-2 bg-rose-50 text-rose-700 font-bold text-xs rounded-xl hover:bg-rose-100 border border-rose-200 transition-colors"
                       >
-                        <RotateCcw size={14} />
-                        Restore & Approve
+                        Reject
                       </button>
-                    )}
-                    <button
-                      onClick={() => openMemberEditor(selectedMember)}
-                      className="bg-[#1A2744] hover:bg-[#111B30] text-white font-bold text-sm px-5 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all"
-                    >
-                      <Pencil size={14} />
-                      Edit Profile
-                    </button>
-                    <button
-                      onClick={() => setMemberToDelete(selectedMember)}
-                      className="border border-[#C41230]/40 text-[#C41230] hover:bg-[#C41230]/10 font-bold text-sm px-5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all"
-                    >
-                      <Trash2 size={14} />
-                      Delete
-                    </button>
-                  </div>
-                  <button 
-                    onClick={() => setIsDrawerOpen(false)}
-                    className="bg-slate-200 hover:bg-slate-300 text-[#0E1525] font-semibold text-sm px-6 py-2.5 rounded-xl transition-all"
-                  >
-                    Close Details
-                  </button>
+                      <button
+                        onClick={() => {
+                          setMemberToApprove(selectedMember);
+                        }}
+                        className="px-5 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl hover:bg-emerald-700 shadow transition-colors"
+                      >
+                        Approve Member
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Full Profile Editor */}
+        {/* Mandatory Rejection Reason Modal */}
+        {memberToReject && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#111B30]/80 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 text-[#0E1525] border border-slate-200">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+                <div className="flex items-center gap-2 text-rose-600">
+                  <AlertCircle size={20} />
+                  <h3 className="font-extrabold text-base">Reject Application</h3>
+                </div>
+                <button
+                  onClick={() => {
+                    setMemberToReject(null);
+                    setRejectionReason('');
+                  }}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <p className="text-xs text-[#5A6380] mb-4">
+                Please specify the reason for rejecting <strong>{memberToReject.full_name || memberToReject.email}</strong>. This note will be recorded in the audit trail and emailed directly to the applicant with instructions to re-submit.
+              </p>
+
+              <form onSubmit={handleConfirmReject} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#3A4260] uppercase mb-1">
+                    Rejection Reason (Required, min 5 chars)
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    minLength={5}
+                    placeholder="e.g. Identity document is unclear, please upload a clear business visiting card or government ID..."
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMemberToReject(null);
+                      setRejectionReason('');
+                    }}
+                    className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={actionLoading || rejectionReason.trim().length < 5}
+                    className="px-5 py-2 text-xs font-bold bg-rose-600 text-white rounded-xl hover:bg-rose-700 disabled:opacity-50 transition-colors shadow"
+                  >
+                    {actionLoading ? 'Rejecting & Notifying…' : 'Confirm Rejection'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Approve Confirmation Modal */}
+        {memberToApprove && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#111B30]/80 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 text-[#0E1525] border border-slate-200">
+              <div className="flex items-center gap-3 mb-4 text-emerald-600">
+                <CheckCircle size={28} />
+                <div>
+                  <h3 className="font-extrabold text-base">Approve Club Member</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Grant full access to mobile directory and events.</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 mb-6">
+                Are you sure you want to approve <strong>{memberToApprove.full_name || memberToApprove.email}</strong>? An automated welcome push notification will be sent.
+              </p>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMemberToApprove(null)}
+                  className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={handleConfirmApprove}
+                  className="px-5 py-2 text-xs font-bold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow"
+                >
+                  {actionLoading ? 'Approving…' : 'Yes, Approve Member'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {memberToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#111B30]/80 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 text-[#0E1525] border border-slate-200">
+              <div className="flex items-center gap-3 mb-4 text-rose-600">
+                <Trash2 size={24} />
+                <div>
+                  <h3 className="font-extrabold text-base">Delete Member Account</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">This action is permanent and cannot be undone.</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 mb-6">
+                Are you sure you want to permanently delete <strong>{memberToDelete.full_name || memberToDelete.email}</strong> from the SEC Cricket Club database?
+              </p>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMemberToDelete(null)}
+                  className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={handleConfirmDelete}
+                  className="px-5 py-2 text-xs font-bold bg-rose-600 text-white rounded-xl hover:bg-rose-700 disabled:opacity-50 transition-colors shadow"
+                >
+                  {actionLoading ? 'Deleting…' : 'Delete Account'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full Member Edit Modal */}
         {memberToEdit && (
           <MemberEditModal
             member={memberToEdit}
             apiURL={apiURL}
             token={token}
             onClose={() => setMemberToEdit(null)}
-            onSaved={(updated) => {
-              setImportSuccess('Member profile updated successfully.');
-              if (updated) {
-                setMembers((current) =>
-                  current.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)),
-                );
-                // Keep the drawer in sync instead of forcing the admin to reopen it.
-                setSelectedMember((current) =>
-                  current && current.id === updated.id ? { ...current, ...updated } : current,
-                );
-              }
+            onSaved={() => {
+              setMemberToEdit(null);
               fetchMembers();
+              setSuccessMessage('Member profile updated successfully.');
+              setTimeout(() => setSuccessMessage(null), 3000);
             }}
           />
         )}
 
-        {/* Delete Confirmation Modal */}
-        {memberToDelete && (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-            <div
-              className="absolute inset-0 bg-[#111B30]/80 backdrop-blur-sm"
-              onClick={() => setMemberToDelete(null)}
-            />
-            <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 relative shadow-2xl space-y-6">
-              <div className="flex items-center space-x-3 text-[#C41230]">
-                <Trash2 size={24} />
-                <h3 className="text-lg font-bold text-[#0E1525]">Delete Member Permanently?</h3>
-              </div>
-              <p className="text-sm text-[#3A4260] leading-relaxed">
-                This permanently removes{' '}
-                <strong className="text-[#0E1525]">
-                  {memberToDelete.full_name || memberToDelete.email}
-                </strong>{' '}
-                and all of their profile data, uploads, and directory listing. This cannot be undone.
-              </p>
-              <div className="flex justify-end gap-3">
+        {/* Add Member Modal */}
+        {isAddModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#111B30]/80 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 text-[#0E1525] border border-slate-200 my-8">
+              <div className="flex justify-between items-center pb-4 border-b border-slate-100 mb-4">
+                <div className="flex items-center gap-2 text-[#1A2744]">
+                  <Plus size={20} className="text-[#C41230]" />
+                  <h3 className="font-extrabold text-lg">Add New Club Member</h3>
+                </div>
                 <button
-                  onClick={() => setMemberToDelete(null)}
-                  disabled={actionLoading}
-                  className="px-4 py-2 text-sm font-semibold border border-slate-300 rounded-xl text-[#3A4260] hover:bg-slate-100 disabled:opacity-50"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDeleteConfirm}
-                  disabled={actionLoading}
-                  className="px-5 py-2.5 text-sm font-bold bg-[#C41230] hover:bg-[#9E0E27] text-white rounded-xl shadow-md disabled:opacity-50"
-                >
-                  {actionLoading ? 'Deleting...' : 'Delete Permanently'}
+                  <X size={18} />
                 </button>
               </div>
+
+              {manualErrors.form && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-semibold flex items-center gap-2">
+                  <AlertCircle size={14} />
+                  <span>{manualErrors.form}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleManualSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-[#3A4260] uppercase mb-1">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Rahul Sharma"
+                      value={manualForm.full_name}
+                      onChange={(e) => setManualForm({ ...manualForm, full_name: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#C41230] ${manualErrors.full_name ? 'border-red-400' : 'border-slate-200'}`}
+                    />
+                    {manualErrors.full_name && <p className="text-[10px] text-red-600 mt-1 font-semibold">{manualErrors.full_name}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#3A4260] uppercase mb-1">
+                      Membership Number *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. SEC0042"
+                      value={manualForm.membership_number}
+                      onChange={(e) => setManualForm({ ...manualForm, membership_number: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#C41230] ${manualErrors.membership_number ? 'border-red-400' : 'border-slate-200'}`}
+                    />
+                    {manualErrors.membership_number && <p className="text-[10px] text-red-600 mt-1 font-semibold">{manualErrors.membership_number}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#3A4260] uppercase mb-1">
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. rahul@example.com"
+                      value={manualForm.email}
+                      onChange={(e) => setManualForm({ ...manualForm, email: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#C41230] ${manualErrors.email ? 'border-red-400' : 'border-slate-200'}`}
+                    />
+                    {manualErrors.email && <p className="text-[10px] text-red-600 mt-1 font-semibold">{manualErrors.email}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#3A4260] uppercase mb-1">
+                      Mobile Number (E.164) *
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="e.g. +91 9876543210"
+                      value={manualForm.phone}
+                      onChange={(e) => setManualForm({ ...manualForm, phone: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#C41230] ${manualErrors.phone ? 'border-red-400' : 'border-slate-200'}`}
+                    />
+                    {manualErrors.phone && <p className="text-[10px] text-red-600 mt-1 font-semibold">{manualErrors.phone}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#3A4260] uppercase mb-1">
+                      Business Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Sharma Steel Corporation"
+                      value={manualForm.business_name}
+                      onChange={(e) => setManualForm({ ...manualForm, business_name: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#3A4260] uppercase mb-1">
+                      Business Category
+                    </label>
+                    <select
+                      value={manualForm.business_category}
+                      onChange={(e) => setManualForm({ ...manualForm, business_category: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
+                    >
+                      {categories.map((c, i) => (
+                        <option key={i} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#3A4260] uppercase mb-1">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Ludhiana"
+                      value={manualForm.city}
+                      onChange={(e) => setManualForm({ ...manualForm, city: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#3A4260] uppercase mb-1">
+                      Designation
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Managing Director"
+                      value={manualForm.designation}
+                      onChange={(e) => setManualForm({ ...manualForm, designation: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingManual}
+                    className="px-5 py-2 text-xs font-bold bg-[#C41230] text-white rounded-xl hover:bg-[#9E0E27] disabled:opacity-50 transition-colors shadow"
+                  >
+                    {isSubmittingManual ? 'Saving Member…' : 'Register Member'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
 
-        {/* ── Day 4 Modals ── */}
-        
-        {/* Approve Confirmation Modal */}
-        {memberToApprove && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-[#111B30]/80 backdrop-blur-sm" onClick={() => setMemberToApprove(null)} />
-            <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 relative shadow-2xl space-y-6">
-              <div className="flex items-center space-x-3 text-emerald-700">
-                <CheckCircle size={26} />
-                <h3 className="text-lg font-bold text-[#0E1525]">Approve Member Verification?</h3>
+        {/* CSV Bulk Import Modal */}
+        {isImportModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#111B30]/80 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full p-6 text-[#0E1525] border border-slate-200 my-8">
+              <div className="flex justify-between items-center pb-4 border-b border-slate-100 mb-4">
+                <div className="flex items-center gap-2 text-[#1A2744]">
+                  <FileSpreadsheet size={22} className="text-[#C41230]" />
+                  <h3 className="font-extrabold text-lg">Bulk Import Members Roster</h3>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsImportModalOpen(false);
+                    setImportRows([]);
+                    setImportReport(null);
+                  }}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                >
+                  <X size={18} />
+                </button>
               </div>
-              <p className="text-sm text-[#3A4260] leading-relaxed">
-                Are you sure you want to approve <strong className="text-[#0E1525]">{memberToApprove.full_name}</strong>? 
-                This will grant them immediate access to the directory, business search, and all member-only features.
-              </p>
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => setMemberToApprove(null)}
-                  disabled={actionLoading}
-                  className="px-4 py-2 text-sm font-semibold border border-slate-300 rounded-xl text-[#3A4260] hover:bg-slate-100 transition-all disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleApproveConfirm}
-                  disabled={actionLoading}
-                  className="px-5 py-2.5 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {actionLoading ? 'Approving...' : 'Confirm Approve'}
-                </button>
+
+              <div className="space-y-4 text-xs">
+                {/* File Upload Box */}
+                <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center hover:border-[#1A2744] transition-colors bg-[#F8FAFC]">
+                  <Upload size={32} className="mx-auto text-slate-400 mb-2" />
+                  <p className="font-bold text-sm text-[#0E1525]">Select CSV or Excel Spreadsheet</p>
+                  <p className="text-slate-500 text-[11px] mt-0.5 mb-4">
+                    Ensure columns match: Membership Number, Full Name, Email, Mobile Number, Business Name.
+                  </p>
+                  <div className="flex justify-center gap-3">
+                    <label className="px-4 py-2 bg-[#1A2744] hover:bg-[#111B30] text-white font-bold rounded-xl cursor-pointer transition-colors shadow">
+                      Choose File
+                      <input 
+                        type="file" 
+                        accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                        onChange={handleFileSelect}
+                        className="hidden" 
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={downloadTemplate}
+                      className="px-4 py-2 border border-slate-300 hover:bg-white text-slate-700 font-bold rounded-xl transition-colors"
+                    >
+                      Download Template
+                    </button>
+                  </div>
+                </div>
+
+                {/* Validation Report Summary */}
+                {importReport && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="font-extrabold text-sm text-[#1A2744]">Pre-Import Validation Summary</span>
+                      <div className="flex gap-2">
+                        <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-700 rounded">
+                          Total: {importReport.total}
+                        </span>
+                        <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 rounded">
+                          Valid: {importReport.valid}
+                        </span>
+                        {importReport.errors > 0 && (
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-rose-100 text-rose-800 rounded">
+                            Errors: {importReport.errors}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Mode selection */}
+                    <div className="flex items-center gap-4 text-xs font-semibold pt-2 border-t border-slate-200">
+                      <span>Import Mode:</span>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="create_only"
+                          checked={importMode === 'create_only'}
+                          onChange={() => setImportMode('create_only')}
+                        />
+                        <span>Create New (Skip existing)</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="create_update"
+                          checked={importMode === 'create_update'}
+                          onChange={() => setImportMode('create_update')}
+                        />
+                        <span>Create &amp; Update Existing</span>
+                      </label>
+                    </div>
+
+                    {/* Pre-import Preview Table */}
+                    <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl">
+                      <table className="w-full text-left border-collapse text-[11px]">
+                        <thead>
+                          <tr className="bg-[#1A2744] text-white font-bold sticky top-0">
+                            <th className="p-2">Row</th>
+                            <th className="p-2">Name</th>
+                            <th className="p-2">Email</th>
+                            <th className="p-2">Member ID</th>
+                            <th className="p-2">Validation</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {importRows.slice(0, 50).map((r, i) => (
+                            <tr key={i} className={r.errors.length > 0 ? 'bg-rose-50' : 'bg-white'}>
+                              <td className="p-2 font-mono">{r.rowNumber}</td>
+                              <td className="p-2 font-semibold">{r.full_name || '<Empty>'}</td>
+                              <td className="p-2">{r.email || '<Empty>'}</td>
+                              <td className="p-2 font-mono">{r.membership_number}</td>
+                              <td className="p-2">
+                                {r.errors.length === 0 ? (
+                                  <span className="text-emerald-600 font-bold flex items-center gap-1">
+                                    <Check size={12} /> Valid
+                                  </span>
+                                ) : (
+                                  <span className="text-rose-600 font-bold" title={r.errors.join(', ')}>
+                                    {r.errors.join(', ')}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsImportModalOpen(false);
+                      setImportRows([]);
+                      setImportReport(null);
+                    }}
+                    className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isImporting || importRows.length === 0}
+                    onClick={handleCommitImport}
+                    className="px-5 py-2 text-xs font-bold bg-[#C41230] text-white rounded-xl hover:bg-[#9E0E27] disabled:opacity-50 transition-colors shadow"
+                  >
+                    {isImporting ? 'Processing Database Transaction…' : `Execute Import (${importRows.length} Rows)`}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Reject Modal */}
-        {memberToReject && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-[#111B30]/80 backdrop-blur-sm" onClick={() => setMemberToReject(null)} />
-            <form onSubmit={handleRejectSubmit} className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 relative shadow-2xl space-y-6">
-              <div className="flex items-center space-x-3 text-[#C41230]">
-                <AlertCircle size={26} className="text-[#C41230]" />
-                <h3 className="text-lg font-bold text-[#0E1525]">Reject Member Registration</h3>
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-[#3A4260] uppercase tracking-wider block">
-                  Rejection Reason (Required)
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  placeholder="Provide a clear description explaining what needs to be fixed (e.g., Visiting card text blurry, Business category mismatched)..."
-                  className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl p-3.5 text-sm text-[#0E1525] placeholder-[#7A85A0] focus:outline-none focus:border-[#C41230] transition-colors resize-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => { setMemberToReject(null); setRejectionReason(''); }}
-                  disabled={actionLoading}
-                  className="px-4 py-2 text-sm font-semibold border border-slate-300 rounded-xl text-[#3A4260] hover:bg-slate-100 transition-all disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading || rejectionReason.trim().length < 5}
-                  className="px-5 py-2.5 text-sm font-bold bg-[#C41230] hover:bg-[#9E0E27] text-white rounded-xl shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {actionLoading ? 'Rejecting...' : 'Submit Rejection'}
-                </button>
-              </div>
-            </form>
           </div>
         )}
       </div>

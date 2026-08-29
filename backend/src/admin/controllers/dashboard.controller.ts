@@ -26,6 +26,7 @@ export class DashboardController {
         approvedMembers,
         pendingMembers,
         rejectedMembers,
+        inactiveMembers,
         membersThisMonth,
         membersPrevMonth,
         upcomingEvents,
@@ -43,6 +44,7 @@ export class DashboardController {
         User.count({ where: { role: 'member', approval_status: 'approved' } }),
         User.count({ where: { role: 'member', approval_status: 'pending' } }),
         User.count({ where: { role: 'member', approval_status: 'rejected' } }),
+        User.count({ where: { role: 'member', status: 'inactive' } }),
         User.count({
           where: {
             role: 'member',
@@ -135,6 +137,7 @@ export class DashboardController {
           approved_members: approvedMembers,
           pending_members: pendingMembers,
           rejected_members: rejectedMembers,
+          inactive_members: inactiveMembers,
           members_this_month: membersThisMonth,
           members_change_pct: memberChangePct,
           upcoming_events: upcomingEvents,

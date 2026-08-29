@@ -30,6 +30,18 @@ router.post('/reset-password', AuthController.resetPassword);
  */
 router.get('/me', verifyAdminJwt as any, AuthController.getMe);
 
+/**
+ * Route to update current administrator profile
+ * PUT /api/admin/auth/profile
+ */
+router.put('/profile', verifyAdminJwt as any, AuthController.updateProfile);
+
+/**
+ * Route to change current administrator password
+ * PUT /api/admin/auth/change-password
+ */
+router.put('/change-password', verifyAdminJwt as any, AuthController.changePassword);
+
 // ── Member management routes (admin only) ────────────────────────────────────
 router.get('/members', verifyAdminJwt as any, AdminMemberController.getMembers);
 router.get('/members/:id', verifyAdminJwt as any, AdminMemberController.getMemberById);

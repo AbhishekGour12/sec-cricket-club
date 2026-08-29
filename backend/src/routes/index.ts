@@ -113,6 +113,7 @@ router.post('/admin/members/import/commit', verifyAdminJwt as any, MemberImportC
 
 // Admin Notifications Center
 router.get('/admin/notifications', verifyAdminJwt as any, NotificationController.getNotifications);
+router.post('/admin/notifications/mark-all-read', verifyAdminJwt as any, NotificationController.markAllAsRead);
 router.post('/admin/notifications/:id/read', verifyAdminJwt as any, NotificationController.markAsRead);
 
 // Admin Dashboard

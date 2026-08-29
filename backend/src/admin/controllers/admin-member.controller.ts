@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import User from '../../user/models/User';
 import { logger } from '../../utils/logger';
 import { validateUniqueMobile } from '../../utils/phone';
+import { sequelize } from '../../config/database';
 
 export class AdminMemberActionsController {
   /**
@@ -125,94 +126,95 @@ export class AdminMemberActionsController {
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-      for (let i = 0; i < records.length; i++) {
-        const row = records[i];
-        const rowNum = i + 2; // spreadsheet header row + 1-indexed
+      await sequelize.transaction(async (t) => {
+        for (let i = 0; i < records.length; i++) {
+          const row = records[i];
+          const rowNum = i + 2; // spreadsheet header row + 1-indexed
 
-        const mNum = row['Membership Number'] || row['membership_number'];
-        const name = row['Full Name'] || row['full_name'];
-        const email = row['Email'] || row['email'];
-        const phone = row['Mobile Number'] || row['mobile_number'] || row['phone'];
-        const designation = row['Designation'] || row['designation'];
-        const bizName = row['Business Name'] || row['business_name'];
-        const bizCat = row['Business Category'] || row['business_category'];
-        const city = row['City'] || row['city'];
-        const state = row['State'] || row['state'];
-        const country = row['Country'] || row['country'];
+          const mNum = row['Membership Number'] || row['membership_number'];
+          const name = row['Full Name'] || row['full_name'];
+          const email = row['Email'] || row['email'];
+          const phone = row['Mobile Number'] || row['mobile_number'] || row['phone'];
+          const designation = row['Designation'] || row['designation'];
+          const bizName = row['Business Name'] || row['business_name'];
+          const bizCat = row['Business Category'] || row['business_category'];
+          const city = row['City'] || row['city'];
+          const state = row['State'] || row['state'];
+          const country = row['Country'] || row['country'];
 
-        // Row validation
-        if (!mNum || !name || !email) {
-          results.errors.push(`Row ${rowNum}: Missing required fields (Membership Number, Name, and Email are required).`);
-          results.skipped++;
-          continue;
-        }
-
-        const cleanEmail = String(email).trim().toLowerCase();
-        const cleanMNum = String(mNum).trim();
-
-        if (!emailRegex.test(cleanEmail)) {
-          results.errors.push(`Row ${rowNum}: Invalid email format (${email}).`);
-          results.skipped++;
-          continue;
-        }
-
-        try {
-          // Check for conflicts
-          const existingByEmail = await User.findOne({ where: { email: cleanEmail } });
-          const existingByMNum = await User.findOne({ where: { membership_number: cleanMNum } });
-
-          const existingUser = existingByEmail || existingByMNum;
-
-          if (existingUser) {
-            if (mode === 'create_update') {
-              // Update existing user profile properties
-              const updatePayload: any = {
-                full_name: String(name).trim(),
-                phone: phone ? String(phone).trim() : existingUser.phone,
-                designation: designation ? String(designation).trim() : existingUser.designation,
-                business_name: bizName ? String(bizName).trim() : existingUser.business_name,
-                business_category: bizCat ? String(bizCat).trim() : existingUser.business_category,
-                city: city ? String(city).trim() : existingUser.city,
-                state: state ? String(state).trim() : existingUser.state,
-                country: country ? String(country).trim() : existingUser.country,
-                // Keep source as excel if updated
-                member_source: 'excel',
-              };
-
-              await existingUser.update(updatePayload);
-              results.updated++;
-            } else {
-              // Create Only Mode: Skip existing matching profiles
-              results.skipped++;
-            }
-          } else {
-            // Create New Member Profile
-            const placeholderUid = `excel_${Date.now()}_${Math.floor(Math.random() * 1000)}_${i}`;
-            await User.create({
-              firebase_uid: placeholderUid,
-              email: cleanEmail,
-              full_name: String(name).trim(),
-              phone: phone ? String(phone).trim() : undefined,
-              membership_number: cleanMNum,
-              designation: designation ? String(designation).trim() : 'Associate Member',
-              business_name: bizName ? String(bizName).trim() : undefined,
-              business_category: bizCat ? String(bizCat).trim() : undefined,
-              city: city ? String(city).trim() : undefined,
-              state: state ? String(state).trim() : undefined,
-              country: country ? String(country).trim() : undefined,
-              status: 'inactive', // manual imports wait for activation upon Google Login
-              approval_status: 'approved', // auto-approve pre-validated excel rosters
-              member_source: 'excel',
-              is_profile_completed: false,
-            } as any);
-            results.created++;
+          // Row validation
+          if (!mNum || !name || !email) {
+            results.errors.push(`Row ${rowNum}: Missing required fields (Membership Number, Name, and Email are required).`);
+            results.skipped++;
+            continue;
           }
-        } catch (err: any) {
-          logger.error(`Import failed at row ${rowNum}:`, err);
-          results.errors.push(`Row ${rowNum}: Database insert error (${err.message}).`);
-          results.skipped++;
+
+          const cleanEmail = String(email).trim().toLowerCase();
+          const cleanMNum = String(mNum).trim();
+
+          if (!emailRegex.test(cleanEmail)) {
+            results.errors.push(`Row ${rowNum}: Invalid email format (${email}).`);
+            results.skipped++;
+            continue;
+          }
+
+          try {
+            // Check for conflicts
+            const existingByEmail = await User.findOne({ where: { email: cleanEmail }, transaction: t });
+            const existingByMNum = await User.findOne({ where: { membership_number: cleanMNum }, transaction: t });
+
+            const existingUser = existingByEmail || existingByMNum;
+
+            if (existingUser) {
+              if (mode === 'create_update') {
+                const updatePayload: any = {
+                  full_name: String(name).trim(),
+                  phone: phone ? String(phone).trim() : existingUser.phone,
+                  designation: designation ? String(designation).trim() : existingUser.designation,
+                  business_name: bizName ? String(bizName).trim() : existingUser.business_name,
+                  business_category: bizCat ? String(bizCat).trim() : existingUser.business_category,
+                  city: city ? String(city).trim() : existingUser.city,
+                  state: state ? String(state).trim() : existingUser.state,
+                  country: country ? String(country).trim() : existingUser.country,
+                  member_source: 'excel',
+                };
+
+                await existingUser.update(updatePayload, { transaction: t });
+                results.updated++;
+              } else {
+                results.skipped++;
+              }
+            } else {
+              const placeholderUid = `excel_${Date.now()}_${Math.floor(Math.random() * 1000)}_${i}`;
+              await User.create(
+                {
+                  firebase_uid: placeholderUid,
+                  email: cleanEmail,
+                  full_name: String(name).trim(),
+                  phone: phone ? String(phone).trim() : undefined,
+                  membership_number: cleanMNum,
+                  designation: designation ? String(designation).trim() : 'Associate Member',
+                  business_name: bizName ? String(bizName).trim() : undefined,
+                  business_category: bizCat ? String(bizCat).trim() : undefined,
+                  city: city ? String(city).trim() : undefined,
+                  state: state ? String(state).trim() : undefined,
+                  country: country ? String(country).trim() : undefined,
+                  status: 'inactive',
+                  approval_status: 'approved',
+                  member_source: 'excel',
+                  is_profile_completed: false,
+                } as any,
+                { transaction: t }
+              );
+              results.created++;
+            }
+          } catch (err: any) {
+            logger.error(`Import failed at row ${rowNum}:`, err);
+            results.errors.push(`Row ${rowNum}: Database insert error (${err.message}).`);
+            results.skipped++;
+          }
         }
-      }
+      });
 
       logger.info(`Bulk import finished: Created ${results.created}, Updated ${results.updated}, Skipped/Failed ${results.skipped}`);
       res.status(200).json({

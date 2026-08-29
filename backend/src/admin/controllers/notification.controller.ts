@@ -49,4 +49,18 @@ export class NotificationController {
       res.status(500).json({ error: 'Internal Server Error', message: 'Failed to update notification status.' });
     }
   }
+
+  /**
+   * POST /api/admin/notifications/mark-all-read
+   * Mark all unread notifications as read
+   */
+  public static async markAllAsRead(_req: Request, res: Response): Promise<void> {
+    try {
+      await Notification.update({ read: true }, { where: { read: false } });
+      res.status(200).json({ message: 'All notifications marked as read.' });
+    } catch (error) {
+      logger.error('Error marking all notifications as read:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: 'Failed to update notifications.' });
+    }
+  }
 }

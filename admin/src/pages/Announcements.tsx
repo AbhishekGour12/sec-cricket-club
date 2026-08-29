@@ -13,17 +13,24 @@ import {
   ChevronLeft,
   ChevronRight,
   Upload,
-  FileText,
   Image as ImageIcon,
   Send,
   EyeOff,
   AlertCircle,
   CheckCircle,
   Clock,
-  Calendar,
+  Copy,
+  Bold,
+  Italic,
+  List,
+  ListOrdered,
+  Heading,
+  Link as LinkIcon,
+  Code
 } from 'lucide-react';
 import { AdminLayout } from '../layouts/AdminLayout';
 import { getAdminMediaUrl } from '../utils/mediaUrl';
+import { getApiUrl } from '../lib/api';
 
 const ANNOUNCEMENT_TYPES = [
   'General',
@@ -131,17 +138,15 @@ export const Announcements: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<AnnouncementForm>(EMPTY_FORM);
+  const [editorMode, setEditorMode] = useState<'write' | 'preview'>('write');
   const [coverUploading, setCoverUploading] = useState(false);
-  const [attachmentUploading, setAttachmentUploading] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
-  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   const [previewItem, setPreviewItem] = useState<Announcement | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-
   const [deleteTarget, setDeleteTarget] = useState<Announcement | null>(null);
 
-  const apiURL = import.meta.env.VITE_API_URL || 'https://sec-api.duckdns.org/api';
+  const apiURL = getApiUrl();
   const token = localStorage.getItem('admin_jwt');
   const limit = 10;
 
@@ -164,17 +169,18 @@ export const Announcements: React.FC = () => {
       if (search.trim()) params.search = search.trim();
       if (typeFilter) params.type = typeFilter;
       if (priorityFilter) params.priority = priorityFilter;
-      const status = TAB_STATUS_MAP[activeTab];
-      if (status) params.status = status;
+      if (TAB_STATUS_MAP[activeTab]) params.status = TAB_STATUS_MAP[activeTab];
 
       const response = await axios.get(`${apiURL}/admin/announcements`, {
         headers: { Authorization: `Bearer ${token}` },
         params,
       });
 
-      setAnnouncements(response.data.announcements || []);
-      setTotal(response.data.total ?? 0);
-      setTotalPages(response.data.totalPages ?? 1);
+      const fetchedAnnouncements: Announcement[] = response.data.announcements || [];
+      setAnnouncements(fetchedAnnouncements);
+      const pagination = response.data.pagination || {};
+      setTotal(pagination.total ?? response.data.total ?? fetchedAnnouncements.length);
+      setTotalPages(pagination.total_pages ?? response.data.totalPages ?? 1);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load announcements.');
     } finally {
@@ -186,16 +192,50 @@ export const Announcements: React.FC = () => {
     fetchAnnouncements();
   }, [fetchAnnouncements]);
 
+  // 1-Click Interactive Inline Pinning Switch
+  const handleTogglePin = async (item: Announcement, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = !item.is_pinned;
+    setAnnouncements(prev => prev.map(a => a.id === item.id ? { ...a, is_pinned: updated } : a));
+
+    try {
+      await axios.put(
+        `${apiURL}/admin/announcements/${item.id}`,
+        { is_pinned: updated },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSuccess(`Announcement "${item.title}" ${updated ? 'pinned to top' : 'unpinned'}.`);
+      setTimeout(() => setSuccess(null), 2500);
+    } catch (err: any) {
+      fetchAnnouncements();
+      setError(err.response?.data?.message || 'Failed to toggle pin state.');
+    }
+  };
+
+  // Duplicate Announcement Action
+  const handleDuplicate = (item: Announcement, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingId(null);
+    setForm({
+      title: `${item.title} (Copy)`,
+      announcement_type: item.announcement_type,
+      priority: item.priority,
+      short_description: item.short_description || '',
+      description: item.description || '',
+      cover_image: item.cover_image || '',
+      attachments: item.attachments || [],
+      is_pinned: false,
+      publish_date: '',
+      expiry_date: item.expiry_date ? toDatetimeLocal(item.expiry_date) : '',
+      status: 'Draft',
+    });
+    setIsFormOpen(true);
+  };
+
   const handleTabChange = (tab: StatusTab) => {
     setActiveTab(tab);
     setPage(1);
     setSearchParams(tab === 'all' ? {} : { tab });
-  };
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPage(1);
-    fetchAnnouncements();
   };
 
   const handleClearFilters = () => {
@@ -205,9 +245,24 @@ export const Announcements: React.FC = () => {
     setPage(1);
   };
 
+  const mapToForm = (item: Announcement): AnnouncementForm => ({
+    title: item.title,
+    announcement_type: item.announcement_type,
+    priority: item.priority,
+    short_description: item.short_description,
+    description: item.description,
+    cover_image: item.cover_image || '',
+    attachments: item.attachments || [],
+    is_pinned: item.is_pinned,
+    publish_date: toDatetimeLocal(item.publish_date),
+    expiry_date: toDatetimeLocal(item.expiry_date),
+    status: item.status,
+  });
+
   const openCreateForm = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setEditorMode('write');
     setIsFormOpen(true);
     setError(null);
     setSuccess(null);
@@ -216,41 +271,18 @@ export const Announcements: React.FC = () => {
   const openEditForm = async (item: Announcement) => {
     setError(null);
     setSuccess(null);
+    setEditorMode('write');
     try {
       const response = await axios.get(`${apiURL}/admin/announcements/${item.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const a: Announcement = response.data.announcement ?? item;
-      setEditingId(a.id);
-      setForm({
-        title: a.title,
-        announcement_type: a.announcement_type,
-        priority: a.priority,
-        short_description: a.short_description,
-        description: a.description,
-        cover_image: a.cover_image || '',
-        attachments: a.attachments || [],
-        is_pinned: a.is_pinned,
-        publish_date: toDatetimeLocal(a.publish_date),
-        expiry_date: toDatetimeLocal(a.expiry_date),
-        status: a.status,
-      });
+      const data: Announcement = response.data.announcement ?? item;
+      setEditingId(data.id);
+      setForm(mapToForm(data));
       setIsFormOpen(true);
     } catch {
       setEditingId(item.id);
-      setForm({
-        title: item.title,
-        announcement_type: item.announcement_type,
-        priority: item.priority,
-        short_description: item.short_description,
-        description: item.description,
-        cover_image: item.cover_image || '',
-        attachments: item.attachments || [],
-        is_pinned: item.is_pinned,
-        publish_date: toDatetimeLocal(item.publish_date),
-        expiry_date: toDatetimeLocal(item.expiry_date),
-        status: item.status,
-      });
+      setForm(mapToForm(item));
       setIsFormOpen(true);
     }
   };
@@ -268,7 +300,26 @@ export const Announcements: React.FC = () => {
     }
   };
 
-  const uploadFile = async (file: File): Promise<string> => {
+  // Markdown Toolbar Inserter
+  const insertMarkdown = (syntaxBefore: string, syntaxAfter = '') => {
+    const textarea = document.getElementById('announcement-desc-textarea') as HTMLTextAreaElement;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = form.description.substring(start, end);
+    const replacement = `${syntaxBefore}${selectedText || 'text'}${syntaxAfter}`;
+
+    const newText = form.description.substring(0, start) + replacement + form.description.substring(end);
+    setForm({ ...form, description: newText });
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + syntaxBefore.length, start + replacement.length - syntaxAfter.length);
+    }, 50);
+  };
+
+  const uploadCoverImage = async (file: File): Promise<string> => {
     const formData = new FormData();
     formData.append('file', file);
     const response = await axios.post(`${apiURL}/admin/announcements/upload`, formData, {
@@ -282,7 +333,6 @@ export const Announcements: React.FC = () => {
 
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
-    e.stopPropagation();
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -292,34 +342,12 @@ export const Announcements: React.FC = () => {
     setCoverUploading(true);
     setError(null);
     try {
-      const url = await uploadFile(file);
+      const url = await uploadCoverImage(file);
       setForm((prev) => ({ ...prev, cover_image: url }));
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to upload cover image.');
     } finally {
       setCoverUploading(false);
-      e.target.value = '';
-    }
-  };
-
-  const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.type !== 'application/pdf') {
-      setError('Attachment must be a PDF file.');
-      return;
-    }
-    setAttachmentUploading(true);
-    setError(null);
-    try {
-      const url = await uploadFile(file);
-      setForm((prev) => ({ ...prev, attachments: [...prev.attachments, url] }));
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to upload attachment.');
-    } finally {
-      setAttachmentUploading(false);
       e.target.value = '';
     }
   };
@@ -339,27 +367,30 @@ export const Announcements: React.FC = () => {
       cover_image: form.cover_image || null,
       attachments: form.attachments,
       is_pinned: form.is_pinned,
+      status: form.status,
       publish_date: fromDatetimeLocal(form.publish_date),
       expiry_date: fromDatetimeLocal(form.expiry_date),
-      status: form.status,
     };
 
     try {
       if (editingId) {
-        const response = await axios.put(`${apiURL}/admin/announcements/${editingId}`, payload, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setSuccess(response.data.message || 'Announcement updated successfully.');
+        const response = await axios.put(
+          `${apiURL}/admin/announcements/${editingId}`,
+          payload,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        setSuccess(response.data.message || 'Announcement updated.');
       } else {
         const response = await axios.post(`${apiURL}/admin/announcements`, payload, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setSuccess(response.data.message || 'Announcement created successfully.');
+        setSuccess(response.data.message || 'Announcement created.');
       }
       setIsFormOpen(false);
       setEditingId(null);
       setForm(EMPTY_FORM);
       fetchAnnouncements();
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to save announcement.');
     } finally {
@@ -376,11 +407,12 @@ export const Announcements: React.FC = () => {
         {},
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      setSuccess(response.data.message || 'Announcement published.');
+      setSuccess(response.data.message || 'Announcement published to member apps.');
       fetchAnnouncements();
       if (previewItem?.id === item.id && response.data.announcement) {
         setPreviewItem(response.data.announcement);
       }
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to publish announcement.');
     } finally {
@@ -397,11 +429,12 @@ export const Announcements: React.FC = () => {
         {},
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      setSuccess(response.data.message || 'Announcement unpublished.');
+      setSuccess(response.data.message || 'Announcement reverted to draft.');
       fetchAnnouncements();
       if (previewItem?.id === item.id && response.data.announcement) {
         setPreviewItem(response.data.announcement);
       }
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to unpublish announcement.');
     } finally {
@@ -414,14 +447,16 @@ export const Announcements: React.FC = () => {
     setActionLoading(true);
     setError(null);
     try {
-      const response = await axios.delete(`${apiURL}/admin/announcements/${deleteTarget.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await axios.delete(
+        `${apiURL}/admin/announcements/${deleteTarget.id}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
       setSuccess(response.data.message || 'Announcement deleted.');
       setDeleteTarget(null);
       setIsPreviewOpen(false);
       setPreviewItem(null);
       fetchAnnouncements();
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to delete announcement.');
       setDeleteTarget(null);
@@ -430,61 +465,46 @@ export const Announcements: React.FC = () => {
     }
   };
 
+  const getPriorityBadge = (priority: AnnouncementPriority) => {
+    switch (priority) {
+      case 'Urgent':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700">Urgent</span>;
+      case 'High':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">High</span>;
+      case 'Medium':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">Medium</span>;
+      default:
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700">Low</span>;
+    }
+  };
+
   const getStatusBadge = (status: AnnouncementStatus) => {
     switch (status) {
       case 'Published':
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-            <CheckCircle size={12} className="mr-1" />
-            Published
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+            <CheckCircle size={10} className="mr-1" /> Published
           </span>
         );
       case 'Expired':
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-500/10 text-slate-600 border border-slate-500/20">
-            <Clock size={12} className="mr-1" />
-            Expired
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+            <Clock size={10} className="mr-1" /> Expired
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
-            <AlertCircle size={12} className="mr-1" />
-            Draft
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+            <Clock size={10} className="mr-1" /> Draft
           </span>
         );
     }
   };
 
-  const getPriorityBadge = (priority: AnnouncementPriority) => {
-    const styles: Record<AnnouncementPriority, string> = {
-      Low: 'bg-slate-100 text-slate-600 border-slate-200',
-      Medium: 'bg-blue-100 text-blue-700 border-blue-200',
-      High: 'bg-orange-100 text-orange-700 border-orange-200',
-      Urgent: 'bg-red-100 text-red-700 border-red-200',
-    };
-    return (
-      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${styles[priority]}`}>
-        {priority}
-      </span>
-    );
-  };
-
-  const formatDate = (value?: string | null) => {
-    if (!value) return '—';
-    return new Date(value).toLocaleString([], {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   const tabs: { key: StatusTab; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'drafts', label: 'Drafts' },
+    { key: 'all', label: 'All Notices' },
     { key: 'published', label: 'Published' },
+    { key: 'drafts', label: 'Drafts' },
     { key: 'expired', label: 'Expired' },
   ];
 
@@ -496,143 +516,151 @@ export const Announcements: React.FC = () => {
           <div>
             <h1 className="text-3xl font-extrabold text-[#0E1525] tracking-tight flex items-center gap-2">
               <Megaphone size={28} className="text-[#C41230]" />
-              Club Announcements
+              Announcements &amp; News
             </h1>
             <p className="text-sm text-[#3A4260] mt-1 font-medium">
-              Create, schedule, and publish announcements for SEC Cricket Club members.
+              Broadcast club news, meeting notices, emergency alerts, and tournament updates.
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="bg-white px-4 py-2 border border-slate-200 shadow-sm rounded-xl">
-              <span className="text-xs text-[#7A85A0] font-bold uppercase tracking-wider">Total</span>
-              <p className="text-lg font-extrabold text-[#1A2744]">{total}</p>
-            </div>
             <button
               onClick={openCreateForm}
-              className="bg-[#C41230] hover:bg-[#9E0E27] text-white font-bold text-sm px-5 py-3 rounded-xl shadow-lg shadow-[#C41230]/20 transition-all flex items-center gap-2"
+              className="bg-[#C41230] hover:bg-[#9E0E27] text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-1.5"
             >
-              <Plus size={16} />
-              Add Announcement
+              <Plus size={15} />
+              <span>Create Announcement</span>
             </button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex flex-wrap border-b border-slate-200 gap-6">
+        {/* Notifications & Feedback */}
+        {error && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-xs font-semibold flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={16} />
+              <span>{error}</span>
+            </div>
+            <button onClick={() => setError(null)} className="text-rose-500 hover:text-rose-800">✕</button>
+          </div>
+        )}
+        {success && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl text-xs font-semibold flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle size={16} />
+              <span>{success}</span>
+            </div>
+            <button onClick={() => setSuccess(null)} className="text-emerald-500 hover:text-emerald-800">✕</button>
+          </div>
+        )}
+
+        {/* Status Filter Tabs */}
+        <div className="flex border-b border-slate-200 gap-8">
           {tabs.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => handleTabChange(key)}
-              className={`pb-4 text-sm font-bold transition-all relative ${
+              className={`pb-3.5 text-sm font-bold transition-all relative flex items-center gap-1.5 ${
                 activeTab === key ? 'text-[#C41230]' : 'text-[#7A85A0] hover:text-[#0E1525]'
               }`}
             >
-              {label}
+              <span>{label}</span>
               {activeTab === key && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#C41230]" />}
             </button>
           ))}
         </div>
 
         {/* Filters */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
-          <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3.5 top-3.5 text-[#7A85A0]" size={18} />
-              <input
-                type="text"
-                placeholder="Search by title, description, or type..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm text-[#0E1525] placeholder-[#7A85A0] focus:outline-none focus:border-[#C41230] transition-colors"
-              />
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <select
-                value={typeFilter}
-                onChange={(e) => {
-                  setTypeFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-3 text-sm text-[#0E1525] font-medium focus:outline-none focus:border-[#C41230] min-w-[160px]"
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="w-full md:flex-1 relative min-w-0">
+            <Search className="absolute left-3.5 top-3 text-[#7A85A0]" size={18} />
+            <input
+              type="text"
+              placeholder="Search by announcement title or description..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-[#F0F2F7] border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-xs text-[#0E1525] placeholder-[#7A85A0] focus:outline-none focus:border-[#C41230] transition-colors"
+            />
+            {search && (
+              <button 
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
               >
-                <option value="">All Types</option>
-                {ANNOUNCEMENT_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={priorityFilter}
-                onChange={(e) => {
-                  setPriorityFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-[#F0F2F7] border border-slate-200 rounded-xl px-4 py-3 text-sm text-[#0E1525] font-medium focus:outline-none focus:border-[#C41230] min-w-[140px]"
-              >
-                <option value="">All Priorities</option>
-                {ANNOUNCEMENT_PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="submit"
-                className="bg-[#C41230] hover:bg-[#9E0E27] text-white font-semibold text-sm px-6 py-3 rounded-xl shadow-lg shadow-[#C41230]/20 transition-all"
-              >
-                Search
+                <X size={14} />
               </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <select
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setPage(1);
+              }}
+              className="bg-[#F0F2F7] border border-slate-200 rounded-xl px-3 py-2 text-xs text-[#0E1525] font-semibold focus:outline-none focus:border-[#C41230] min-w-[150px]"
+            >
+              <option value="">All Categories</option>
+              {ANNOUNCEMENT_TYPES.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+
+            <select
+              value={priorityFilter}
+              onChange={(e) => {
+                setPriorityFilter(e.target.value);
+                setPage(1);
+              }}
+              className="bg-[#F0F2F7] border border-slate-200 rounded-xl px-3 py-2 text-xs text-[#0E1525] font-semibold focus:outline-none focus:border-[#C41230]"
+            >
+              <option value="">All Priorities</option>
+              {ANNOUNCEMENT_PRIORITIES.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+
+            {(search || typeFilter || priorityFilter) && (
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="border border-slate-300 hover:bg-slate-100 text-[#1A2744] text-sm px-4 py-3 rounded-xl transition-all font-semibold"
+                className="text-xs text-[#C41230] font-bold hover:underline px-2 py-1"
               >
-                Reset
+                Clear
               </button>
-            </div>
-          </form>
+            )}
+          </div>
         </div>
 
-        {/* Notifications */}
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-600 p-4 rounded-xl text-sm font-semibold">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="bg-emerald-100 border border-emerald-300 text-emerald-800 p-4 rounded-xl text-sm font-semibold">
-            {success}
-          </div>
-        )}
-
-        {/* Table */}
+        {/* Announcements Table */}
         <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-full">
               <thead>
                 <tr className="border-b border-[#243260] text-xs font-bold text-white uppercase tracking-wider bg-[#1A2744]">
-                  <th className="py-4 px-6">Title</th>
-                  <th className="py-4 px-6">Type</th>
-                  <th className="py-4 px-6">Priority</th>
-                  <th className="py-4 px-6">Status</th>
-                  <th className="py-4 px-6">Pinned</th>
-                  <th className="py-4 px-6">Publish Date</th>
-                  <th className="py-4 px-6 text-right">Actions</th>
+                  <th className="py-4 px-5">Announcement</th>
+                  <th className="py-4 px-4">Type</th>
+                  <th className="py-4 px-4">Priority</th>
+                  <th className="py-4 px-4 text-center">Pinned</th>
+                  <th className="py-4 px-4">Status</th>
+                  <th className="py-4 px-4">Published At</th>
+                  <th className="py-4 px-4">Expires At</th>
+                  <th className="py-4 px-6 text-right sticky right-0 bg-[#1A2744] z-10 min-w-[150px]">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-[#3A4260] text-sm">
+                    <td colSpan={8} className="py-16 text-center text-[#3A4260] text-xs">
                       <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#C41230] mb-2" />
-                      <p>Loading announcements...</p>
+                      <p className="font-semibold">Loading announcements…</p>
                     </td>
                   </tr>
                 ) : announcements.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-[#3A4260] text-sm font-medium">
-                      No announcements match your filters.
+                    <td colSpan={8} className="py-16 text-center text-[#3A4260] text-sm font-medium">
+                      No announcements match your search or filter options.
                     </td>
                   </tr>
                 ) : (
@@ -642,62 +670,114 @@ export const Announcements: React.FC = () => {
                       onClick={() => openPreview(item)}
                       className="group hover:bg-slate-50 cursor-pointer transition-colors"
                     >
-                      <td className="py-4 px-6">
-                        <div className="font-semibold text-[#0E1525] group-hover:text-[#C41230] transition-colors max-w-[240px] truncate">
-                          {item.title}
+                      <td className="py-4 px-5">
+                        <div className="flex items-center gap-3">
+                          {item.cover_image ? (
+                            <img
+                              src={getImageUrl(item.cover_image)}
+                              alt={item.title}
+                              className="w-11 h-11 rounded-xl object-cover border border-slate-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-11 h-11 rounded-xl bg-[#F0F2F7] border border-slate-200 flex items-center justify-center text-[#7A85A0] shrink-0">
+                              <ImageIcon size={18} />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-bold text-xs text-[#0E1525] group-hover:text-[#C41230] transition-colors max-w-[240px] truncate">
+                              {item.title}
+                            </p>
+                            <p className="text-[11px] text-[#7A85A0] max-w-[240px] truncate mt-0.5">
+                              {item.short_description || item.description}
+                            </p>
+                          </div>
                         </div>
-                        <p className="text-xs text-[#7A85A0] truncate max-w-[240px]">{item.short_description}</p>
                       </td>
-                      <td className="py-4 px-6 text-sm text-[#3A4260] font-medium">{item.announcement_type}</td>
-                      <td className="py-4 px-6">{getPriorityBadge(item.priority)}</td>
-                      <td className="py-4 px-6">{getStatusBadge(item.status)}</td>
-                      <td className="py-4 px-6">
-                        {item.is_pinned ? (
-                          <Pin size={16} className="text-[#C41230]" fill="currentColor" />
-                        ) : (
-                          <span className="text-[#7A85A0] text-xs">—</span>
-                        )}
+
+                      <td className="py-4 px-4 text-xs font-semibold text-[#3A4260]">{item.announcement_type}</td>
+
+                      <td className="py-4 px-4">{getPriorityBadge(item.priority)}</td>
+
+                      {/* 1-Click Interactive Pin Toggle */}
+                      <td className="py-4 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={(e) => handleTogglePin(item, e)}
+                          className={`p-1.5 rounded-lg transition-colors inline-flex items-center ${
+                            item.is_pinned 
+                              ? 'bg-red-50 text-[#C41230] hover:bg-red-100' 
+                              : 'text-slate-300 hover:text-[#C41230] hover:bg-slate-100'
+                          }`}
+                          title={item.is_pinned ? 'Click to unpin' : 'Click to pin to top'}
+                        >
+                          <Pin size={14} fill={item.is_pinned ? 'currentColor' : 'none'} />
+                        </button>
                       </td>
-                      <td className="py-4 px-6 text-xs text-[#3A4260] font-mono">{formatDate(item.publish_date)}</td>
-                      <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-1.5">
+
+                      <td className="py-4 px-4">{getStatusBadge(item.status)}</td>
+
+                      <td className="py-4 px-4 text-xs font-mono text-[#5A6380]">
+                        {item.publish_date ? new Date(item.publish_date).toLocaleDateString() : '—'}
+                      </td>
+
+                      <td className="py-4 px-4 text-xs font-mono text-[#5A6380]">
+                        {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : <span className="text-slate-400">Never</span>}
+                      </td>
+
+                      {/* Sticky Actions Column */}
+                      <td 
+                        className="py-4 px-6 text-right sticky right-0 bg-white group-hover:bg-slate-50 transition-colors shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex justify-end items-center gap-1.5">
                           <button
                             onClick={() => openPreview(item)}
-                            title="Preview"
-                            className="p-2 rounded-lg border border-slate-200 text-[#1A2744] hover:bg-slate-100 transition-all"
+                            title="Preview Notice"
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
                           >
                             <Eye size={14} />
                           </button>
+
                           <button
                             onClick={() => openEditForm(item)}
-                            title="Edit"
-                            className="p-2 rounded-lg border border-slate-200 text-[#1A2744] hover:bg-slate-100 transition-all"
+                            title="Edit Notice"
+                            className="p-1.5 rounded-lg border border-slate-200 text-[#1A2744] hover:bg-slate-100 transition-colors"
                           >
                             <Pencil size={14} />
                           </button>
+
+                          <button
+                            onClick={(e) => handleDuplicate(item, e)}
+                            title="Duplicate Notice"
+                            className="p-1.5 rounded-lg border border-slate-200 text-[#1A2744] hover:bg-slate-100 transition-colors"
+                          >
+                            <Copy size={14} />
+                          </button>
+
                           {item.status === 'Published' ? (
                             <button
                               onClick={() => handleUnpublish(item)}
                               disabled={actionLoading}
-                              title="Unpublish"
-                              className="p-2 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition-all disabled:opacity-50"
+                              title="Revert to Draft"
+                              className="p-1.5 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
                             >
                               <EyeOff size={14} />
                             </button>
-                          ) : item.status !== 'Expired' ? (
+                          ) : (
                             <button
                               onClick={() => handlePublish(item)}
                               disabled={actionLoading}
-                              title="Publish"
-                              className="p-2 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-all disabled:opacity-50"
+                              title="Publish Announcement"
+                              className="p-1.5 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
                             >
                               <Send size={14} />
                             </button>
-                          ) : null}
+                          )}
+
                           <button
                             onClick={() => setDeleteTarget(item)}
-                            title="Delete"
-                            className="p-2 rounded-lg border border-[#C41230]/30 text-[#C41230] hover:bg-[#C41230]/10 transition-all"
+                            title="Delete Notice"
+                            className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -710,310 +790,306 @@ export const Announcements: React.FC = () => {
             </table>
           </div>
 
+          {/* Pagination */}
           {!isLoading && totalPages > 1 && (
-            <div className="flex justify-between items-center px-6 py-4 border-t border-slate-200 bg-[#F0F2F7] text-sm">
-              <span className="text-[#3A4260]">
-                Showing Page <span className="text-[#0E1525] font-bold">{page}</span> of{' '}
-                <span className="text-[#0E1525] font-bold">{totalPages}</span>
-                {' '}({total} total)
+            <div className="flex justify-between items-center px-6 py-4 border-t border-slate-200 bg-[#F8FAFC] text-xs text-[#5A6380]">
+              <span>
+                Showing Page <span className="font-bold text-[#0E1525]">{page}</span> of{' '}
+                <span className="font-bold text-[#0E1525]">{totalPages}</span> ({total} total)
               </span>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="p-2 border border-slate-300 hover:bg-white text-[#1A2744] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="p-2 border border-slate-300 hover:bg-white text-[#1A2744] rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
-                  <ChevronLeft size={16} />
+                  <ChevronLeft size={15} />
                 </button>
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="p-2 border border-slate-300 hover:bg-white text-[#1A2744] rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="p-2 border border-slate-300 hover:bg-white text-[#1A2744] rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
-                  <ChevronRight size={16} />
+                  <ChevronRight size={15} />
                 </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Create / Edit Modal */}
+        {/* Markdown Rich Editor & Creation Modal */}
         {isFormOpen && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-[#111B30]/80 backdrop-blur-sm" onClick={() => setIsFormOpen(false)} />
-            <div className="bg-white border border-slate-200 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl">
-              <div className="sticky top-0 z-10 p-6 border-b border-slate-200 bg-[#1A2744] text-white flex justify-between items-center">
-                <div>
-                  <h2 className="text-xl font-bold">
-                    {editingId ? 'Edit Announcement' : 'New Announcement'}
-                  </h2>
-                  <p className="text-xs text-slate-300 mt-1">
-                    {editingId ? 'Update announcement details below.' : 'Fill in the details to create a new announcement.'}
-                  </p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#111B30]/80 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full p-6 text-[#0E1525] border border-slate-200 my-8">
+              <div className="flex justify-between items-center pb-4 border-b border-slate-100 mb-4">
+                <div className="flex items-center gap-2 text-[#1A2744]">
+                  <Megaphone size={20} className="text-[#C41230]" />
+                  <h3 className="font-extrabold text-lg">
+                    {editingId ? 'Edit Club Announcement' : 'New Club Announcement'}
+                  </h3>
                 </div>
                 <button
                   onClick={() => setIsFormOpen(false)}
-                  className="p-2 text-slate-300 hover:text-white hover:bg-[#243260] rounded-xl transition-all"
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
                 >
-                  <X size={20} />
+                  <X size={18} />
                 </button>
               </div>
 
-              <form onSubmit={handleFormSubmit} className="p-6 space-y-6 bg-[#F0F2F7]">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="md:col-span-2 space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Title *</label>
+              <form onSubmit={handleFormSubmit} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block font-bold text-[#3A4260] uppercase mb-1">
+                      Announcement Title *
+                    </label>
                     <input
                       type="text"
                       required
-                      maxLength={200}
+                      placeholder="e.g. Annual General Body Meeting 2026 Scheduled"
                       value={form.title}
                       onChange={(e) => setForm({ ...form, title: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Type *</label>
+                  <div>
+                    <label className="block font-bold text-[#3A4260] uppercase mb-1">
+                      Category Type *
+                    </label>
                     <select
-                      required
                       value={form.announcement_type}
-                      onChange={(e) =>
-                        setForm({ ...form, announcement_type: e.target.value as AnnouncementType })
-                      }
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
+                      onChange={(e) => setForm({ ...form, announcement_type: e.target.value as AnnouncementType })}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
                     >
                       {ANNOUNCEMENT_TYPES.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
+                        <option key={t} value={t}>{t}</option>
                       ))}
                     </select>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Priority *</label>
+                  <div>
+                    <label className="block font-bold text-[#3A4260] uppercase mb-1">
+                      Priority Level *
+                    </label>
                     <select
-                      required
                       value={form.priority}
-                      onChange={(e) =>
-                        setForm({ ...form, priority: e.target.value as AnnouncementPriority })
-                      }
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
+                      onChange={(e) => setForm({ ...form, priority: e.target.value as AnnouncementPriority })}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
                     >
                       {ANNOUNCEMENT_PRIORITIES.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
+                        <option key={p} value={p}>{p}</option>
                       ))}
                     </select>
                   </div>
 
-                  <div className="md:col-span-2 space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Short Description * (max 500 chars)</label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={500}
-                      value={form.short_description}
-                      onChange={(e) => setForm({ ...form, short_description: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2 space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Description *</label>
-                    <textarea
-                      required
-                      rows={5}
-                      value={form.description}
-                      onChange={(e) => setForm({ ...form, description: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230] resize-none"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs text-[#3A4260] font-semibold flex items-center gap-1.5">
-                      <ImageIcon size={12} />
-                      Cover Image
-                    </label>
-                    {form.cover_image && getImageUrl(form.cover_image) ? (
-                      <div className="relative rounded-xl overflow-hidden border border-slate-200">
-                        <img
-                          src={getImageUrl(form.cover_image)}
-                          alt="Cover preview"
-                          className="w-full h-32 object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setForm({ ...form, cover_image: '' })}
-                          className="absolute top-2 right-2 p-1.5 bg-white/90 rounded-lg text-[#C41230] hover:bg-white"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <input
-                          ref={coverInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleCoverUpload}
-                          disabled={coverUploading}
-                          style={{ display: 'none' }}
-                        />
-                        <button
-                          type="button"
-                          disabled={coverUploading}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            coverInputRef.current?.click();
-                          }}
-                          className="flex flex-col items-center justify-center h-32 w-full border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-[#1A2744] bg-white transition-all disabled:opacity-50"
-                        >
-                          <Upload size={24} className="text-[#7A85A0] mb-2" />
-                          <span className="text-xs text-[#7A85A0] font-semibold">
-                            {coverUploading ? 'Uploading...' : 'Click to upload cover'}
-                          </span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs text-[#3A4260] font-semibold flex items-center gap-1.5">
-                      <FileText size={12} />
-                      PDF Attachment (optional)
-                    </label>
-                    <div className="space-y-2">
-                      {form.attachments.map((url, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                        >
-                          <a
-                            href={getImageUrl(url)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[#C41230] font-semibold truncate flex-1"
-                          >
-                            Attachment {idx + 1}
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setForm({
-                                ...form,
-                                attachments: form.attachments.filter((_, i) => i !== idx),
-                              })
-                            }
-                            className="p-1 text-[#C41230] hover:bg-[#C41230]/10 rounded"
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))}
-                      <input
-                        ref={attachmentInputRef}
-                        type="file"
-                        accept="application/pdf"
-                        onChange={handleAttachmentUpload}
-                        disabled={attachmentUploading}
-                        style={{ display: 'none' }}
-                      />
-                      <button
-                        type="button"
-                        disabled={attachmentUploading}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          attachmentInputRef.current?.click();
-                        }}
-                        className="flex items-center justify-center gap-2 h-16 w-full border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-[#1A2744] bg-white transition-all disabled:opacity-50"
-                      >
-                        <Upload size={16} className="text-[#7A85A0]" />
-                        <span className="text-xs text-[#7A85A0] font-semibold">
-                          {attachmentUploading ? 'Uploading...' : 'Add PDF'}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold flex items-center gap-1.5">
-                      <Calendar size={12} />
-                      Publish Date
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={form.publish_date}
-                      onChange={(e) => setForm({ ...form, publish_date: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold flex items-center gap-1.5">
-                      <Clock size={12} />
-                      Expiry Date
+                  {/* Expiration Date Time Picker */}
+                  <div>
+                    <label className="block font-bold text-[#3A4260] uppercase mb-1">
+                      Auto-Expires At (Optional)
                     </label>
                     <input
                       type="datetime-local"
                       value={form.expiry_date}
                       onChange={(e) => setForm({ ...form, expiry_date: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
                     />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">
+                      Auto-moves to Expired tab after this date.
+                    </span>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs text-[#3A4260] font-semibold">Status</label>
+                  <div>
+                    <label className="block font-bold text-[#3A4260] uppercase mb-1">
+                      Status
+                    </label>
                     <select
                       value={form.status}
-                      onChange={(e) =>
-                        setForm({ ...form, status: e.target.value as AnnouncementStatus })
-                      }
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-[#0E1525] focus:outline-none focus:border-[#C41230]"
+                      onChange={(e) => setForm({ ...form, status: e.target.value as AnnouncementStatus })}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
                     >
                       {ANNOUNCEMENT_STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
+                        <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
                   </div>
 
-                  <div className="flex items-center pt-6">
-                    <label className="flex items-center gap-2 cursor-pointer">
+                  <div className="sm:col-span-2">
+                    <label className="block font-bold text-[#3A4260] uppercase mb-1">
+                      Short Summary / Banner Text *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Brief 1-sentence synopsis shown in push notifications..."
+                      value={form.short_description}
+                      onChange={(e) => setForm({ ...form, short_description: e.target.value })}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
+                    />
+                  </div>
+
+                  {/* Rich Text / Markdown Editor Section */}
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="font-bold text-[#3A4260] uppercase">
+                        Full Content (Markdown Supported) *
+                      </label>
+                      <div className="flex bg-[#F0F2F7] rounded-lg p-0.5 border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setEditorMode('write')}
+                          className={`px-3 py-1 font-bold text-[10px] rounded ${editorMode === 'write' ? 'bg-[#1A2744] text-white shadow' : 'text-slate-600'}`}
+                        >
+                          Write
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditorMode('preview')}
+                          className={`px-3 py-1 font-bold text-[10px] rounded ${editorMode === 'preview' ? 'bg-[#1A2744] text-white shadow' : 'text-slate-600'}`}
+                        >
+                          Live Preview
+                        </button>
+                      </div>
+                    </div>
+
+                    {editorMode === 'write' ? (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden focus-within:border-[#C41230]">
+                        {/* Editor Toolbar */}
+                        <div className="bg-[#F8FAFC] border-b border-slate-200 p-1.5 flex flex-wrap gap-1 items-center text-slate-600">
+                          <button
+                            type="button"
+                            onClick={() => insertMarkdown('**', '**')}
+                            className="p-1.5 hover:bg-slate-200 rounded"
+                            title="Bold"
+                          >
+                            <Bold size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => insertMarkdown('*', '*')}
+                            className="p-1.5 hover:bg-slate-200 rounded"
+                            title="Italic"
+                          >
+                            <Italic size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => insertMarkdown('### ')}
+                            className="p-1.5 hover:bg-slate-200 rounded"
+                            title="Heading"
+                          >
+                            <Heading size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => insertMarkdown('- ')}
+                            className="p-1.5 hover:bg-slate-200 rounded"
+                            title="Bullet list"
+                          >
+                            <List size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => insertMarkdown('1. ')}
+                            className="p-1.5 hover:bg-slate-200 rounded"
+                            title="Numbered list"
+                          >
+                            <ListOrdered size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => insertMarkdown('[', '](https://example.com)')}
+                            className="p-1.5 hover:bg-slate-200 rounded"
+                            title="Link"
+                          >
+                            <LinkIcon size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => insertMarkdown('`', '`')}
+                            className="p-1.5 hover:bg-slate-200 rounded"
+                            title="Code snippet"
+                          >
+                            <Code size={14} />
+                          </button>
+                        </div>
+                        <textarea
+                          id="announcement-desc-textarea"
+                          rows={6}
+                          required
+                          placeholder="Write detailed club announcement details here. Use markdown for styling..."
+                          value={form.description}
+                          onChange={(e) => setForm({ ...form, description: e.target.value })}
+                          className="w-full p-3 text-xs focus:outline-none font-mono"
+                        />
+                      </div>
+                    ) : (
+                      <div className="p-4 border border-slate-200 rounded-xl min-h-[140px] bg-slate-50 prose prose-sm max-w-none text-xs">
+                        {form.description ? (
+                          <div className="whitespace-pre-wrap">{form.description}</div>
+                        ) : (
+                          <span className="text-slate-400 italic">No content typed yet.</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Banner Cover Image */}
+                  <div className="sm:col-span-2">
+                    <label className="block font-bold text-[#3A4260] uppercase mb-1">
+                      Cover Banner Image
+                    </label>
+                    <div className="flex items-center gap-3">
                       <input
-                        type="checkbox"
-                        checked={form.is_pinned}
-                        onChange={(e) => setForm({ ...form, is_pinned: e.target.checked })}
-                        className="w-4 h-4 rounded border-slate-300 text-[#C41230] focus:ring-[#C41230]"
+                        type="text"
+                        placeholder="https://... or upload below"
+                        value={form.cover_image}
+                        onChange={(e) => setForm({ ...form, cover_image: e.target.value })}
+                        className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
                       />
-                      <span className="text-sm font-semibold text-[#0E1525] flex items-center gap-1.5">
-                        <Pin size={14} className="text-[#C41230]" />
-                        Pin to top
-                      </span>
+                      <label className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer transition-colors border border-slate-300 flex items-center gap-1.5 shrink-0">
+                        <Upload size={14} />
+                        <span>{coverUploading ? 'Uploading…' : 'Upload'}</span>
+                        <input
+                          ref={coverInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleCoverUpload}
+                          className="hidden"
+                          disabled={coverUploading}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Pin switch */}
+                  <div className="sm:col-span-2 flex items-center gap-2 pt-1">
+                    <input
+                      type="checkbox"
+                      id="is_pinned"
+                      checked={form.is_pinned}
+                      onChange={(e) => setForm({ ...form, is_pinned: e.target.checked })}
+                      className="rounded text-[#C41230] focus:ring-0 cursor-pointer"
+                    />
+                    <label htmlFor="is_pinned" className="font-bold text-xs text-[#0E1525] cursor-pointer">
+                      Pin this announcement to top of member notice boards
                     </label>
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => setIsFormOpen(false)}
-                    disabled={actionLoading}
-                    className="px-5 py-2.5 text-sm font-semibold border border-slate-300 rounded-xl text-[#3A4260] hover:bg-slate-100 disabled:opacity-50"
+                    className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={actionLoading || coverUploading || attachmentUploading}
-                    className="bg-[#C41230] hover:bg-[#9E0E27] disabled:opacity-50 text-white font-bold text-sm px-8 py-2.5 rounded-xl shadow-lg shadow-[#C41230]/20 transition-all flex items-center gap-2"
+                    disabled={actionLoading}
+                    className="px-5 py-2 text-xs font-bold bg-[#C41230] text-white rounded-xl hover:bg-[#9E0E27] disabled:opacity-50 transition-colors shadow"
                   >
-                    {actionLoading ? 'Saving...' : editingId ? 'Update Announcement' : 'Create Announcement'}
+                    {actionLoading ? 'Saving Notice…' : editingId ? 'Update Notice' : 'Broadcast Announcement'}
                   </button>
                 </div>
               </form>
@@ -1021,156 +1097,56 @@ export const Announcements: React.FC = () => {
           </div>
         )}
 
-        {/* Preview Drawer */}
+        {/* Preview Modal */}
         {isPreviewOpen && previewItem && (
-          <div className="fixed inset-0 z-50 overflow-hidden">
-            <div
-              className="absolute inset-0 bg-[#111B30]/80 backdrop-blur-sm transition-opacity"
-              onClick={() => setIsPreviewOpen(false)}
-            />
-            <div className="absolute inset-y-0 right-0 max-w-full flex">
-              <div className="w-screen max-w-xl bg-white border-l border-slate-200 text-[#0E1525] flex flex-col shadow-2xl relative">
-                <div className="p-6 border-b border-slate-200 bg-[#1A2744] text-white flex justify-between items-center">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#111B30]/80 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden text-[#0E1525] border border-slate-200">
+              {previewItem.cover_image && (
+                <div className="h-44 w-full bg-slate-900 overflow-hidden">
+                  <img
+                    src={getImageUrl(previewItem.cover_image)}
+                    alt={previewItem.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+
+              <div className="p-6 space-y-4">
+                <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h2 className="text-xl font-bold text-white">Announcement Preview</h2>
-                    <p className="text-xs text-slate-300 mt-1 font-medium">How members will see this announcement.</p>
+                    <span className="px-2 py-0.5 text-[9px] font-bold bg-slate-100 rounded border text-slate-600 uppercase">
+                      {previewItem.announcement_type}
+                    </span>
+                    <h2 className="text-lg font-extrabold text-[#0E1525] mt-1">{previewItem.title}</h2>
                   </div>
-                  <button
-                    onClick={() => setIsPreviewOpen(false)}
-                    className="p-2 text-slate-300 hover:text-white hover:bg-[#243260] rounded-xl transition-all"
-                  >
-                    <X size={20} />
-                  </button>
+                  {getStatusBadge(previewItem.status)}
                 </div>
 
-                <div className="flex-1 overflow-y-auto bg-[#F0F2F7]">
-                  {previewItem.cover_image && (
-                    <img
-                      src={getImageUrl(previewItem.cover_image)}
-                      alt={previewItem.title}
-                      className="w-full h-48 object-cover"
-                    />
-                  )}
-                  <div className="p-6 space-y-5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {getStatusBadge(previewItem.status)}
-                      {getPriorityBadge(previewItem.priority)}
-                      <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#1A2744]/10 text-[#1A2744] border border-[#1A2744]/20">
-                        {previewItem.announcement_type}
-                      </span>
-                      {previewItem.is_pinned && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#C41230]/10 text-[#C41230] border border-[#C41230]/20">
-                          <Pin size={10} fill="currentColor" />
-                          Pinned
-                        </span>
-                      )}
-                    </div>
+                {previewItem.short_description && (
+                  <p className="text-xs font-semibold text-[#1A2744] bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    {previewItem.short_description}
+                  </p>
+                )}
 
-                    <div>
-                      <h3 className="text-2xl font-extrabold text-[#0E1525] leading-tight">{previewItem.title}</h3>
-                      <p className="text-sm text-[#3A4260] mt-2 font-medium">{previewItem.short_description}</p>
-                    </div>
-
-                    <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm">
-                      <h4 className="text-xs font-extrabold text-[#1A2744] uppercase tracking-wider mb-2">Full Description</h4>
-                      <p className="text-sm text-[#3A4260] leading-relaxed whitespace-pre-wrap">
-                        {previewItem.description}
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 bg-white p-4 border border-slate-200 rounded-xl shadow-sm text-xs">
-                      <div>
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Publish Date</span>
-                        <span className="text-sm font-semibold text-[#0E1525] mt-1 block">
-                          {formatDate(previewItem.publish_date)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Expiry Date</span>
-                        <span className="text-sm font-semibold text-[#0E1525] mt-1 block">
-                          {formatDate(previewItem.expiry_date)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Created</span>
-                        <span className="text-sm font-semibold text-[#0E1525] mt-1 block">
-                          {formatDate(previewItem.created_at)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-[#7A85A0] font-bold uppercase block">Last Updated</span>
-                        <span className="text-sm font-semibold text-[#0E1525] mt-1 block">
-                          {formatDate(previewItem.updated_at)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {(previewItem.attachments?.length ?? 0) > 0 && (
-                      <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-sm">
-                        <h4 className="text-xs font-extrabold text-[#1A2744] uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                          <FileText size={12} className="text-[#C41230]" />
-                          Attachments
-                        </h4>
-                        <div className="space-y-2">
-                          {previewItem.attachments!.map((url, idx) => (
-                            <a
-                              key={idx}
-                              href={getImageUrl(url)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 text-sm font-semibold text-[#C41230] hover:underline"
-                            >
-                              <FileText size={14} />
-                              PDF Attachment {idx + 1}
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                <div className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
+                  {previewItem.description}
                 </div>
 
-                <div className="p-6 border-t border-slate-200 bg-white flex flex-wrap justify-between items-center gap-3">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => openEditForm(previewItem)}
-                      className="bg-[#1A2744] hover:bg-[#111B30] text-white font-bold text-sm px-5 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all"
-                    >
-                      <Pencil size={14} />
-                      Edit
-                    </button>
-                    {previewItem.status === 'Published' ? (
-                      <button
-                        onClick={() => handleUnpublish(previewItem)}
-                        disabled={actionLoading}
-                        className="border border-amber-400 text-amber-700 hover:bg-amber-50 font-bold text-sm px-5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all disabled:opacity-50"
-                      >
-                        <EyeOff size={14} />
-                        Unpublish
-                      </button>
-                    ) : previewItem.status !== 'Expired' ? (
-                      <button
-                        onClick={() => handlePublish(previewItem)}
-                        disabled={actionLoading}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-5 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all disabled:opacity-50"
-                      >
-                        <Send size={14} />
-                        Publish
-                      </button>
-                    ) : null}
-                    <button
-                      onClick={() => setDeleteTarget(previewItem)}
-                      className="border border-[#C41230]/40 text-[#C41230] hover:bg-[#C41230]/10 font-bold text-sm px-5 py-2.5 rounded-xl flex items-center gap-1.5 transition-all"
-                    >
-                      <Trash2 size={14} />
-                      Delete
-                    </button>
-                  </div>
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                   <button
                     onClick={() => setIsPreviewOpen(false)}
-                    className="bg-slate-200 hover:bg-slate-300 text-[#0E1525] font-semibold text-sm px-6 py-2.5 rounded-xl transition-all"
+                    className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600"
                   >
                     Close
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsPreviewOpen(false);
+                      openEditForm(previewItem);
+                    }}
+                    className="px-4 py-2 text-xs font-bold bg-[#1A2744] text-white rounded-xl hover:bg-[#111B30] shadow"
+                  >
+                    Edit Notice
                   </button>
                 </div>
               </div>
@@ -1178,37 +1154,32 @@ export const Announcements: React.FC = () => {
           </div>
         )}
 
-        {/* Delete Confirmation */}
+        {/* Delete Confirmation Modal */}
         {deleteTarget && (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-            <div
-              className="absolute inset-0 bg-[#111B30]/80 backdrop-blur-sm"
-              onClick={() => setDeleteTarget(null)}
-            />
-            <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 relative shadow-2xl space-y-6">
-              <div className="flex items-center space-x-3 text-[#C41230]">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#111B30]/80 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 text-[#0E1525] border border-slate-200">
+              <div className="flex items-center gap-3 mb-4 text-rose-600">
                 <Trash2 size={24} />
-                <h3 className="text-lg font-bold text-[#0E1525]">Delete Announcement?</h3>
+                <h3 className="font-extrabold text-base">Delete Announcement</h3>
               </div>
-              <p className="text-sm text-[#3A4260] leading-relaxed">
-                This permanently removes{' '}
-                <strong className="text-[#0E1525]">{deleteTarget.title}</strong> and any uploaded
-                cover images or attachments. This cannot be undone.
+              <p className="text-xs text-slate-600 mb-6">
+                Are you sure you want to permanently delete <strong>{deleteTarget.title}</strong>? This action cannot be undone.
               </p>
               <div className="flex justify-end gap-3">
                 <button
+                  type="button"
                   onClick={() => setDeleteTarget(null)}
-                  disabled={actionLoading}
-                  className="px-4 py-2 text-sm font-semibold border border-slate-300 rounded-xl text-[#3A4260] hover:bg-slate-100 disabled:opacity-50"
+                  className="px-4 py-2 text-xs font-bold border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleDeleteConfirm}
+                  type="button"
                   disabled={actionLoading}
-                  className="px-5 py-2.5 text-sm font-bold bg-[#C41230] hover:bg-[#9E0E27] text-white rounded-xl shadow-md disabled:opacity-50"
+                  onClick={handleDeleteConfirm}
+                  className="px-5 py-2 text-xs font-bold bg-rose-600 text-white rounded-xl hover:bg-rose-700 disabled:opacity-50 transition-colors shadow"
                 >
-                  {actionLoading ? 'Deleting...' : 'Delete Permanently'}
+                  {actionLoading ? 'Deleting…' : 'Delete Notice'}
                 </button>
               </div>
             </div>
