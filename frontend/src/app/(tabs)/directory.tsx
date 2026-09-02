@@ -26,9 +26,11 @@ export default function DirectoryScreen() {
   const toast = useToast();
   const { approvalStatus } = useApprovalStore();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
 
-  const { members, isLoadingMembers, membersError, refetchMembers } = useMembers({
+  const { members, categories, isLoadingMembers, membersError, refetchMembers } = useMembers({
     search: searchQuery.trim() || undefined,
+    category: selectedCategory === 'All' ? undefined : selectedCategory,
     limit: 200,
   });
   const { isBookmarked, toggleBookmark, isTogglingBookmark } = useNetwork();
@@ -75,8 +77,8 @@ export default function DirectoryScreen() {
         <EmptyState
           title="No members found"
           description={
-            searchQuery
-              ? `No members match "${searchQuery}". Try a different name, business, or category.`
+            searchQuery || selectedCategory !== 'All'
+              ? `No members match your criteria${selectedCategory !== 'All' ? ` in "${selectedCategory}"` : ''}. Try selecting "All" or a different search.`
               : 'The member directory is empty right now.'
           }
           icon="directory"
@@ -175,6 +177,54 @@ export default function DirectoryScreen() {
           placeholder="Search by name, business or category..."
           containerStyle={styles.searchBarSpacing}
         />
+
+        {/* Category Filter Pills */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.pillsScrollContainer}
+          style={styles.pillsScroll}
+        >
+          <Pressable
+            style={[
+              styles.categoryPill,
+              selectedCategory === 'All' && styles.categoryPillActive,
+            ]}
+            onPress={() => setSelectedCategory('All')}
+          >
+            <Text
+              style={[
+                styles.categoryPillText,
+                selectedCategory === 'All' && styles.categoryPillTextActive,
+              ]}
+            >
+              All
+            </Text>
+          </Pressable>
+
+          {categories.map((cat, idx) => {
+            const isSelected = selectedCategory === cat;
+            return (
+              <Pressable
+                key={idx}
+                style={[
+                  styles.categoryPill,
+                  isSelected && styles.categoryPillActive,
+                ]}
+                onPress={() => setSelectedCategory(isSelected ? 'All' : cat)}
+              >
+                <Text
+                  style={[
+                    styles.categoryPillText,
+                    isSelected && styles.categoryPillTextActive,
+                  ]}
+                >
+                  {cat}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <ScrollView
@@ -202,7 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(122, 133, 160, 0.1)',
-    paddingBottom: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
   titleRow: {
     flexDirection: 'row',
@@ -224,6 +274,36 @@ const styles = StyleSheet.create({
   },
   searchBarSpacing: {
     marginTop: Spacing.md,
+  },
+  pillsScroll: {
+    marginTop: Spacing.md,
+  },
+  pillsScrollContainer: {
+    gap: 8,
+    paddingRight: Spacing.md,
+    alignItems: 'center',
+  },
+  categoryPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: Radius.round,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(122, 133, 160, 0.25)',
+    ...Shadows.sm,
+  },
+  categoryPillActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  categoryPillText: {
+    ...Typography.caption,
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text.secondary,
+  },
+  categoryPillTextActive: {
+    color: '#FFFFFF',
   },
   scrollContent: {
     paddingHorizontal: Spacing.lg,

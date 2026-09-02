@@ -94,10 +94,35 @@ router.get(
   verifyAdminJwt as any,
   BusinessFlyerController.adminGetFlyers,
 );
+router.post(
+  '/admin/member/:memberId/business-flyers',
+  verifyAdminJwt as any,
+  uploadBusinessFlyer.single('image'),
+  BusinessFlyerController.adminCreateFlyer,
+);
 router.delete(
   '/admin/member/:memberId/business-flyers/:id',
   verifyAdminJwt as any,
   BusinessFlyerController.adminDeleteFlyer,
+);
+
+// Admin Member Media Upload
+router.post(
+  '/admin/members/upload-media',
+  verifyAdminJwt as any,
+  upload.single('file'),
+  async (req: any, res: any) => {
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: 'Validation Error', message: 'File is required' });
+        return;
+      }
+      const fileUrl = `/uploads/userprofile/${req.file.filename}`;
+      res.status(200).json({ message: 'File uploaded successfully', url: fileUrl });
+    } catch (error) {
+      res.status(500).json({ error: 'Internal Server Error', message: 'Failed to upload media' });
+    }
+  },
 );
 
 // Admin Custom Actions (Manual Create, Bulk Import)

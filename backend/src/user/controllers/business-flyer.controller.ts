@@ -395,6 +395,56 @@ export class BusinessFlyerController {
       res.status(500).json({ error: 'Internal Server Error', message: 'Failed to retrieve business flyers' });
     }
   }
+
+  /**
+   * POST /api/admin/member/:memberId/business-flyers
+   * Admin adds a flyer for a member either by file upload or direct URL.
+   */
+  public static async adminCreateFlyer(req: any, res: Response): Promise<void> {
+    try {
+      const memberId = parseInt(req.params.memberId, 10);
+      if (!Number.isInteger(memberId) || memberId <= 0) {
+        res.status(400).json({ error: 'Bad Request', message: 'Invalid member id' });
+        return;
+      }
+
+      const member = await User.findByPk(memberId);
+      if (!member) {
+        res.status(404).json({ error: 'Not Found', message: 'Member not found' });
+        return;
+      }
+
+      let imageUrl = req.body.image_url ? String(req.body.image_url).trim() : '';
+      if (req.file) {
+        imageUrl = `/uploads/flyers/${req.file.filename}`;
+      }
+
+      if (!imageUrl) {
+        res.status(400).json({ error: 'Bad Request', message: 'Flyer image file or image_url is required' });
+        return;
+      }
+
+      const count = await BusinessFlyer.count({ where: { user_id: memberId } });
+      if (count >= 10) {
+        res.status(400).json({ error: 'Bad Request', message: 'Maximum of 10 business flyers reached for this member' });
+        return;
+      }
+
+      const flyer = await BusinessFlyer.create({
+        user_id: memberId,
+        image_url: imageUrl,
+        display_order: count,
+      });
+
+      res.status(201).json({
+        message: 'Business flyer created successfully',
+        flyer: serializeFlyer(flyer),
+      });
+    } catch (error) {
+      logger.error('Error in adminCreateFlyer:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: 'Failed to create business flyer' });
+    }
+  }
 }
 
 export default BusinessFlyerController;

@@ -29,6 +29,9 @@ const TEXT_FIELDS = [
   'website',
   'profile_image',
   'business_logo',
+  'visiting_card',
+  'visiting_card_rejection_reason',
+  'rejection_reason',
 ] as const;
 
 const trimOrNull = (value: unknown): string | null => {
@@ -127,6 +130,9 @@ export class AdminProfileController {
       }
       if (['pending', 'approved', 'rejected'].includes(body.approval_status)) {
         updateData.approval_status = body.approval_status;
+      }
+      if (['pending', 'approved', 'rejected'].includes(body.visiting_card_status)) {
+        updateData.visiting_card_status = body.visiting_card_status;
       }
       if (['member', 'admin', 'moderator'].includes(body.role)) {
         updateData.role = body.role;
