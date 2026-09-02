@@ -15,6 +15,8 @@ export interface ProfileEditorPayload {
   linkedin_url?: string;
   achievements?: Achievement[];
   privacy_settings?: PrivacySettings;
+  visiting_card?: string;
+  visiting_card_is_live_capture?: boolean;
 }
 
 /**

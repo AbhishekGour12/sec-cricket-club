@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors, Typography, Spacing, Radius, Shadows, ThemeIcon } from '@/theme';
 import { Avatar } from '@/components/Avatar';
 import { SectionHeader, Divider } from '@/components/Layout';
@@ -19,13 +20,16 @@ import { AchievementsEditor } from '@/components/Profile/AchievementsEditor';
 import { ContactLinksEditor, ContactLinksValue } from '@/components/Profile/ContactLinksEditor';
 import { BusinessFlyersEditor } from '@/components/Profile/BusinessFlyersEditor';
 import { BusinessShowcaseGallery } from '@/components/Profile/BusinessShowcaseGallery';
-import { VisitingCardDisplay } from '@/components/Profile/VisitingCardDisplay';
+import { VisitingCardDisplay, parseVisitingCards } from '@/components/Profile/VisitingCardDisplay';
+import BusinessCardUpload, { CardSide } from '@/components/BusinessCardUpload';
 import { useAuth } from '../../hooks/useAuth';
 import { useApprovalStore } from '../../store/approvalStore';
 import { useProfileEditor } from '../../hooks/useProfileEditor';
 import { useNetwork } from '../../hooks/useNetwork';
 import type { Achievement, PrivacyField, PrivacySettings } from '../../services/authApi';
 import { getMediaUrl } from '../../utils/mediaUrl';
+import { compressImageForUpload } from '../../utils/compressImage';
+import { api } from '../../services/api';
 
 import { useToast } from '@/components/Toast';
 
@@ -62,6 +66,15 @@ export default function ProfileScreen() {
   });
   const [errors, setErrors] = useState<Partial<Record<keyof ContactLinksValue, string>>>({});
 
+  // Digital Visiting Card state for editing
+  const [cardFront, setCardFront] = useState('');
+  const [cardBack, setCardBack] = useState('');
+  const [localFrontUri, setLocalFrontUri] = useState('');
+  const [localBackUri, setLocalBackUri] = useState('');
+  const [isUploadingCard, setIsUploadingCard] = useState<CardSide | null>(null);
+  const [isLiveCapture, setIsLiveCapture] = useState(false);
+  const [cardError, setCardError] = useState<string | undefined>(undefined);
+
   // Pull the latest profile every time the tab is opened, so edits made by an
   // administrator show up without restarting the app.
   useFocusEffect(
@@ -83,11 +96,114 @@ export default function ProfileScreen() {
       linkedin_url: user?.linkedin_url ?? '',
     });
     setErrors({});
+
+    const savedCards = parseVisitingCards(user?.visiting_card);
+    setCardFront(savedCards[0] || '');
+    setCardBack(savedCards[1] || '');
+    setLocalFrontUri('');
+    setLocalBackUri('');
+    setIsUploadingCard(null);
+    setCardError(undefined);
+    setIsLiveCapture(false);
   };
 
   const handleStartEditing = () => {
     seedFromUser();
     setIsEditing(true);
+  };
+
+  const requestPermissions = async () => {
+    const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+    const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
+      toast.showError(
+        'Permission Required',
+        'Camera and Gallery access permissions are required to upload pictures.'
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const handlePickVisitingCard = async (side: CardSide, useCamera: boolean) => {
+    const permitted = await requestPermissions();
+    if (!permitted) return;
+
+    const pickerOptions: ImagePicker.ImagePickerOptions = {
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.7,
+      aspect: [7, 4],
+    };
+
+    const result = useCamera
+      ? await ImagePicker.launchCameraAsync(pickerOptions)
+      : await ImagePicker.launchImageLibraryAsync(pickerOptions);
+
+    if (result.canceled || !result.assets || result.assets.length === 0) {
+      return;
+    }
+
+    const pickedUri = result.assets[0].uri;
+    if (side === 'front') {
+      setLocalFrontUri(pickedUri);
+    } else {
+      setLocalBackUri(pickedUri);
+    }
+    setCardError(undefined);
+    setIsUploadingCard(side);
+
+    try {
+      const compressed = await compressImageForUpload(pickedUri, { maxEdge: 1280, quality: 0.7 });
+      const formDataUpload = new FormData();
+      formDataUpload.append('image', {
+        uri: compressed.uri,
+        name: compressed.fileName,
+        type: compressed.mimeType,
+      } as any);
+      formDataUpload.append('is_live_capture', useCamera ? 'true' : 'false');
+
+      const response = await api.post('/upload/visiting-card', formDataUpload);
+      const url = response.data?.url || response.data?.urls?.[0];
+
+      if (url) {
+        if (side === 'front') {
+          setCardFront(url);
+          toast.showSuccess('Front side of card uploaded');
+        } else {
+          setCardBack(url);
+          toast.showSuccess('Back side of card uploaded');
+        }
+        if (useCamera) {
+          setIsLiveCapture(true);
+        }
+      }
+    } catch (err: any) {
+      console.error(`Visiting card upload error for ${side}:`, err);
+      if (err.response?.data?.validationErrors && Array.isArray(err.response.data.validationErrors)) {
+        const errorMsg = err.response.data.validationErrors.join('\n\n');
+        setCardError(errorMsg);
+        toast.showError('Visiting Card Image Rejected', errorMsg);
+      } else {
+        const msg = err.response?.data?.message || 'Failed to upload card image. Please try again.';
+        setCardError(msg);
+        toast.showError('Upload Failed', msg);
+      }
+      if (side === 'front') setLocalFrontUri('');
+      else setLocalBackUri('');
+    } finally {
+      setIsUploadingCard(null);
+    }
+  };
+
+  const handleRemoveVisitingCard = (side: CardSide) => {
+    if (side === 'front') {
+      setCardFront('');
+      setLocalFrontUri('');
+    } else {
+      setCardBack('');
+      setLocalBackUri('');
+    }
   };
 
   const displayName = user?.full_name || 'Member';
@@ -144,6 +260,8 @@ export default function ProfileScreen() {
   const handleSave = async () => {
     if (!validate()) return;
 
+    const combinedCards = [cardFront, cardBack].filter(Boolean).join(',');
+
     try {
       await saveProfile({
         alternate_phone: links.alternate_phone.trim(),
@@ -153,9 +271,11 @@ export default function ProfileScreen() {
         linkedin_url: links.linkedin_url.trim(),
         achievements,
         privacy_settings: privacy,
+        visiting_card: combinedCards,
+        ...(isLiveCapture ? { visiting_card_is_live_capture: true } : {}),
       });
       setIsEditing(false);
-      toast.showSuccess('Profile Updated', 'Your contact details and accomplishments have been saved.');
+      toast.showSuccess('Profile Updated', 'Your profile details and business card have been saved.');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Please try again.';
       toast.showError('Could Not Save', message);
@@ -291,8 +411,13 @@ export default function ProfileScreen() {
           {/* Product & Business Showcase Images */}
           <BusinessShowcaseGallery images={user?.business_images} />
 
-          {/* Visiting Card — front & back images */}
-          <VisitingCardDisplay visitingCard={user?.visiting_card} />
+          {/* Visiting Card — front & back images (in view mode) */}
+          {!isEditing && (
+            <VisitingCardDisplay
+              visitingCard={user?.visiting_card}
+              onEditPress={handleStartEditing}
+            />
+          )}
 
           {/* Business Flyers — managed in profile update (not completion) */}
           <BusinessFlyersEditor editable={isEditing} />
@@ -305,6 +430,21 @@ export default function ProfileScreen() {
 
           {isEditing ? (
             <>
+              {/* Business Card (Visiting Card) Upload Slot */}
+              <View style={styles.cardEditorCard}>
+                <BusinessCardUpload
+                  cardFront={cardFront}
+                  cardBack={cardBack}
+                  localFrontUri={localFrontUri}
+                  localBackUri={localBackUri}
+                  onPickImage={handlePickVisitingCard}
+                  onRemoveImage={handleRemoveVisitingCard}
+                  isUploading={isUploadingCard}
+                  error={cardError}
+                  required={false}
+                />
+              </View>
+
               <AchievementsEditor achievements={achievements} onChange={setAchievements} />
               <ContactLinksEditor
                 primaryPhone={user?.phone}
@@ -319,7 +459,7 @@ export default function ProfileScreen() {
               <View style={styles.saveRow}>
                 <Pressable
                   onPress={handleCancel}
-                  disabled={isSaving}
+                  disabled={isSaving || isUploadingCard !== null}
                   style={styles.cancelBtn}
                   accessibilityRole="button"
                 >
@@ -327,12 +467,17 @@ export default function ProfileScreen() {
                 </Pressable>
                 <Pressable
                   onPress={handleSave}
-                  disabled={isSaving}
-                  style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
+                  disabled={isSaving || isUploadingCard !== null}
+                  style={[
+                    styles.saveBtn,
+                    (isSaving || isUploadingCard !== null) && styles.saveBtnDisabled,
+                  ]}
                   accessibilityRole="button"
                 >
                   {isSaving ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : isUploadingCard !== null ? (
+                    <Text style={styles.saveBtnText}>Uploading Card...</Text>
                   ) : (
                     <Text style={styles.saveBtnText}>Save Changes</Text>
                   )}
@@ -626,5 +771,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     marginLeft: 10,
+  },
+  cardEditorCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    ...Shadows.sm,
   },
 });

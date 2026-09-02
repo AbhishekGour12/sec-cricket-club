@@ -26,6 +26,7 @@ interface BusinessCardUploadProps {
   onRemoveImage?: (side: CardSide) => void;
   isUploading: CardSide | null;
   error?: string;
+  required?: boolean;
 }
 
 const GUIDELINES = [
@@ -60,6 +61,7 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
   onRemoveImage,
   isUploading,
   error,
+  required = true,
 }) => {
   const [activeSide, setActiveSide] = useState<CardSide>('front');
   const [guidelinesVisible, setGuidelinesVisible] = useState(false);
@@ -121,7 +123,11 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
       <View style={styles.sectionHeader}>
         <MaterialIcons name="credit-card" size={20} color={Colors.primary} />
         <Text style={styles.sectionTitle}>Visiting Card (Business Card)</Text>
-        <Text style={styles.requiredBadge}>FRONT REQUIRED</Text>
+        {required ? (
+          <Text style={styles.requiredBadge}>FRONT REQUIRED</Text>
+        ) : (
+          <Text style={styles.optionalBadge}>OPTIONAL</Text>
+        )}
       </View>
 
       <Text style={styles.sectionHint}>
@@ -133,8 +139,8 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
         {/* FRONT SIDE CARD SLOT */}
         <SingleCardSlot
           side="front"
-          label="Front Side (Required)"
-          required
+          label={required ? 'Front Side (Required)' : 'Front Side'}
+          required={required}
           displayUri={frontResolved}
           isUploading={isUploading === 'front'}
           onPick={() => handleStartPick('front')}
@@ -421,6 +427,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.secondary,
     backgroundColor: '#F9D0D7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    letterSpacing: 0.5,
+  },
+  optionalBadge: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: Colors.text.outline,
+    backgroundColor: '#EEF2F6',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,

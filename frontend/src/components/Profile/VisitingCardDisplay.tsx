@@ -28,9 +28,10 @@ export function parseVisitingCards(visitingCard?: string | null): string[] {
 
 interface VisitingCardDisplayProps {
   visitingCard?: string | null;
+  onEditPress?: () => void;
 }
 
-export function VisitingCardDisplay({ visitingCard }: VisitingCardDisplayProps) {
+export function VisitingCardDisplay({ visitingCard, onEditPress }: VisitingCardDisplayProps) {
   const cards = useMemo(() => parseVisitingCards(visitingCard), [visitingCard]);
   const urls = useMemo(
     () => cards.map((c) => getMediaUrl(c)).filter(Boolean) as string[],
@@ -41,9 +42,22 @@ export function VisitingCardDisplay({ visitingCard }: VisitingCardDisplayProps) 
   if (urls.length === 0) {
     return (
       <View style={styles.section}>
-        <SectionHeader title="Digital Visiting Card" />
+        <SectionHeader
+          title="Digital Visiting Card"
+          actionLabel={onEditPress ? 'Add Card' : undefined}
+          onActionPress={onEditPress}
+        />
         <View style={styles.emptyBox}>
           <Text style={styles.emptyText}>No visiting card uploaded</Text>
+          {onEditPress && (
+            <Pressable
+              style={styles.addCardBtn}
+              onPress={onEditPress}
+              accessibilityRole="button"
+            >
+              <Text style={styles.addCardBtnText}>+ Add Business Card</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     );
@@ -53,7 +67,11 @@ export function VisitingCardDisplay({ visitingCard }: VisitingCardDisplayProps) 
 
   return (
     <View style={styles.section}>
-      <SectionHeader title="Digital Visiting Card" />
+      <SectionHeader
+        title="Digital Visiting Card"
+        actionLabel={onEditPress ? 'Edit' : undefined}
+        onActionPress={onEditPress}
+      />
 
       <View style={styles.cardStack}>
         {urls.map((uri, index) => (
@@ -128,6 +146,19 @@ const styles = StyleSheet.create({
   emptyText: {
     ...Typography.caption,
     color: Colors.text.outline,
+  },
+  addCardBtn: {
+    marginTop: Spacing.md,
+    backgroundColor: Colors.secondary,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.sm,
+  },
+  addCardBtnText: {
+    ...Typography.button,
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
 
