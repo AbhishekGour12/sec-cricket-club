@@ -25,6 +25,9 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 const uploadsDirectory = path.join(__dirname, '../uploads');
 app.use('/uploads', express.static(uploadsDirectory));
 app.use('/api/uploads', express.static(uploadsDirectory));
+// Fallback alias for legacy/direct flyers paths
+app.use('/uploads/flyers', express.static(path.join(uploadsDirectory, 'userprofile')));
+app.use('/api/uploads/flyers', express.static(path.join(uploadsDirectory, 'userprofile')));
 
 // Setup Morgan Logging
 if (process.env.NODE_ENV === 'production') {

@@ -190,13 +190,14 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
   const setField = (key: keyof EditableMember, value: any) =>
     setForm((current) => ({ ...current, [key]: value }));
 
-  // Upload media helper
-  const handleFileUpload = async (
+  // Upload media helper (supports both single and multiple files)
+  const handleFilesUpload = async (
     field: 'profile_image' | 'business_logo' | 'card_front' | 'card_back' | 'showcase' | 'flyer',
-    file: File
+    files: FileList | File[]
   ) => {
-    if (!file.type.startsWith('image/')) {
-      setError('Selected file must be an image.');
+    const fileArray = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (fileArray.length === 0) {
+      setError('Selected file(s) must be valid images.');
       return;
     }
 
@@ -204,23 +205,71 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
     setError(null);
 
     try {
-      if (field === 'flyer') {
-        const formData = new FormData();
-        formData.append('image', file);
-        const res = await axios.post(`${apiURL}/admin/member/${member.id}/business-flyers`, formData, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
-          },
-        });
-        if (res.data.flyer) {
-          setFlyers((prev) => [...prev, res.data.flyer]);
+      if (field === 'showcase') {
+        const remaining = 5 - businessImages.length;
+        if (remaining <= 0) {
+          setError('Maximum 5 showcase images allowed. Please remove existing ones first.');
+          return;
         }
-        setSuccess('Flyer uploaded successfully!');
+
+        const toUpload = fileArray.slice(0, remaining);
+        const uploadedUrls: string[] = [];
+
+        for (const file of toUpload) {
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await axios.post(`${apiURL}/admin/members/upload-media`, formData, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data',
+            },
+          });
+          const url = res.data?.url || (Array.isArray(res.data?.urls) ? res.data.urls[0] : null);
+          if (url) uploadedUrls.push(url);
+        }
+
+        setBusinessImages((prev) => [...prev, ...uploadedUrls].slice(0, 5));
+        if (fileArray.length > remaining) {
+          setSuccess(`Uploaded ${uploadedUrls.length} image(s). (Showcase gallery limit is 5 images)`);
+        } else {
+          setSuccess(`${uploadedUrls.length} showcase image(s) uploaded successfully!`);
+        }
         setTimeout(() => setSuccess(null), 2500);
         return;
       }
 
+      if (field === 'flyer') {
+        const remaining = 10 - flyers.length;
+        if (remaining <= 0) {
+          setError('Maximum 10 business flyers allowed.');
+          return;
+        }
+
+        const toUpload = fileArray.slice(0, remaining);
+        const newFlyers: any[] = [];
+
+        for (const file of toUpload) {
+          const formData = new FormData();
+          formData.append('image', file);
+          const res = await axios.post(`${apiURL}/admin/member/${member.id}/business-flyers`, formData, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data',
+            },
+          });
+          if (res.data?.flyer) {
+            newFlyers.push(res.data.flyer);
+          }
+        }
+
+        setFlyers((prev) => [...prev, ...newFlyers]);
+        setSuccess(`${newFlyers.length} flyer(s) uploaded successfully!`);
+        setTimeout(() => setSuccess(null), 2500);
+        return;
+      }
+
+      // Single file fields: profile_image, business_logo, card_front, card_back
+      const file = fileArray[0];
       const formData = new FormData();
       formData.append('file', file);
       const res = await axios.post(`${apiURL}/admin/members/upload-media`, formData, {
@@ -239,19 +288,20 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
         setCardFront(uploadedUrl);
       } else if (field === 'card_back') {
         setCardBack(uploadedUrl);
-      } else if (field === 'showcase') {
-        if (businessImages.length < 5) {
-          setBusinessImages((prev) => [...prev, uploadedUrl]);
-        } else {
-          setError('Maximum 5 showcase images allowed.');
-        }
       }
+      setSuccess('Image uploaded successfully!');
+      setTimeout(() => setSuccess(null), 2000);
     } catch (err: any) {
       setError(err.response?.data?.message || `Failed to upload image for ${field}.`);
     } finally {
       setUploadingField(null);
     }
   };
+
+  const handleFileUpload = (
+    field: 'profile_image' | 'business_logo' | 'card_front' | 'card_back' | 'showcase' | 'flyer',
+    file: File
+  ) => handleFilesUpload(field, [file]);
 
   // Add showcase image by URL
   const handleAddShowcaseUrl = () => {
@@ -693,12 +743,24 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
               {businessImages.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                   {businessImages.map((img, idx) => (
-                    <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-white group">
-                      <img src={getImageUrl(img)} alt={`Showcase ${idx + 1}`} className="w-full h-full object-cover" />
+                    <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-white group shadow-sm">
+                      <a
+                        href={getImageUrl(img)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block w-full h-full"
+                        title="Click to view full image"
+                      >
+                        <img
+                          src={getImageUrl(img)}
+                          alt={`Showcase ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </a>
                       <button
                         type="button"
                         onClick={() => setBusinessImages((prev) => prev.filter((_, i) => i !== idx))}
-                        className="absolute top-1 right-1 p-1 bg-black/60 text-white hover:bg-rose-600 rounded-full transition-colors opacity-90 group-hover:opacity-100"
+                        className="absolute top-1 right-1 p-1 bg-black/60 text-white hover:bg-rose-600 rounded-full transition-colors opacity-90 group-hover:opacity-100 z-10"
                         title="Remove image"
                       >
                         <X size={12} />
@@ -732,14 +794,16 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                       ) : (
                         <Upload size={13} />
                       )}
-                      <span>Upload File</span>
+                      <span>{uploadingField === 'showcase' ? 'Uploading...' : 'Upload Files (Multi-select)'}</span>
                       <input
                         type="file"
                         accept="image/*"
+                        multiple
                         disabled={uploadingField !== null}
                         onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) handleFileUpload('showcase', f);
+                          if (e.target.files && e.target.files.length > 0) {
+                            handleFilesUpload('showcase', e.target.files);
+                          }
                           e.target.value = '';
                         }}
                         className="hidden"
@@ -766,12 +830,35 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {flyers.map((flyer) => (
-                    <div key={flyer.id} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-slate-200 bg-white group">
-                      <img src={getImageUrl(flyer.image_url)} alt="Flyer" className="w-full h-full object-cover" />
+                    <div key={flyer.id} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-slate-200 bg-white group shadow-sm">
+                      <a
+                        href={getImageUrl(flyer.image_url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block w-full h-full"
+                        title="Click to view full flyer"
+                      >
+                        <img
+                          src={getImageUrl(flyer.image_url)}
+                          alt="Flyer"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (target.src.includes('/uploads/flyers/')) {
+                              target.src = target.src.replace('/uploads/flyers/', '/uploads/userprofile/');
+                              return;
+                            }
+                            if (target.src.includes('/flyers/')) {
+                              target.src = target.src.replace('/flyers/', '/userprofile/');
+                              return;
+                            }
+                          }}
+                        />
+                      </a>
                       <button
                         type="button"
                         onClick={() => handleDeleteFlyer(flyer.id)}
-                        className="absolute top-1 right-1 p-1 bg-black/60 text-white hover:bg-rose-600 rounded-full transition-colors opacity-90 group-hover:opacity-100"
+                        className="absolute top-1 right-1 p-1 bg-black/60 text-white hover:bg-rose-600 rounded-full transition-colors opacity-90 group-hover:opacity-100 z-10"
                         title="Delete flyer"
                       >
                         <Trash2 size={12} />
@@ -805,14 +892,16 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                     ) : (
                       <Upload size={13} />
                     )}
-                    <span>Upload Flyer File</span>
+                    <span>{uploadingField === 'flyer' ? 'Uploading...' : 'Upload Flyers (Multi-select)'}</span>
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
                       disabled={uploadingField !== null}
                       onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleFileUpload('flyer', f);
+                        if (e.target.files && e.target.files.length > 0) {
+                          handleFilesUpload('flyer', e.target.files);
+                        }
                         e.target.value = '';
                       }}
                       className="hidden"

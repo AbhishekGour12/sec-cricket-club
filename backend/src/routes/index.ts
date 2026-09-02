@@ -106,19 +106,24 @@ router.delete(
   BusinessFlyerController.adminDeleteFlyer,
 );
 
-// Admin Member Media Upload
+// Admin Member Media Upload (Single or Multi-file support)
 router.post(
   '/admin/members/upload-media',
   verifyAdminJwt as any,
-  upload.single('file'),
+  upload.any(),
   async (req: any, res: any) => {
     try {
-      if (!req.file) {
+      const files: any[] = req.files || (req.file ? [req.file] : []);
+      if (!files || files.length === 0) {
         res.status(400).json({ error: 'Validation Error', message: 'File is required' });
         return;
       }
-      const fileUrl = `/uploads/userprofile/${req.file.filename}`;
-      res.status(200).json({ message: 'File uploaded successfully', url: fileUrl });
+      const urls = files.map((f: any) => `/uploads/userprofile/${f.filename}`);
+      res.status(200).json({
+        message: 'File(s) uploaded successfully',
+        url: urls[0],
+        urls: urls,
+      });
     } catch (error) {
       res.status(500).json({ error: 'Internal Server Error', message: 'Failed to upload media' });
     }

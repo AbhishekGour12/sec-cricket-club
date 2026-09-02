@@ -26,7 +26,17 @@ const serializeFlyer = (flyer: BusinessFlyer) => ({
 
 const resolveAbsolutePath = (imageUrl: string): string => {
   const relative = imageUrl.replace(/^\//, '');
-  return path.resolve(__dirname, '../../../', relative);
+  const primary = path.resolve(__dirname, '../../../', relative);
+  if (fs.existsSync(primary)) return primary;
+  if (relative.includes('uploads/flyers')) {
+    const fallback = path.resolve(
+      __dirname,
+      '../../../',
+      relative.replace('uploads/flyers', 'uploads/userprofile'),
+    );
+    if (fs.existsSync(fallback)) return fallback;
+  }
+  return primary;
 };
 
 const hashFile = (filePath: string): string => {
@@ -416,7 +426,7 @@ export class BusinessFlyerController {
 
       let imageUrl = req.body.image_url ? String(req.body.image_url).trim() : '';
       if (req.file) {
-        imageUrl = `/uploads/flyers/${req.file.filename}`;
+        imageUrl = `/uploads/userprofile/${req.file.filename}`;
       }
 
       if (!imageUrl) {

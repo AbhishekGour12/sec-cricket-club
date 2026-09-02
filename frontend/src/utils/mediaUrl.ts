@@ -28,11 +28,16 @@ export const getMediaUrl = (imagePath?: string | null): string | undefined => {
     return trimmed;
   }
 
-  // Handle all relative paths (e.g. /uploads/..., uploads/..., userprofile/..., or filename.jpg)
+  // Handle all relative paths (e.g. /uploads/..., uploads/..., userprofile/..., flyers/..., or filename.jpg)
   let cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  if (cleanPath.startsWith('/uploads/flyers/')) {
+    cleanPath = cleanPath.replace('/uploads/flyers/', '/uploads/userprofile/');
+  }
   if (!cleanPath.startsWith('/uploads/') && !cleanPath.startsWith('/api/uploads/')) {
     if (cleanPath.startsWith('/userprofile/')) {
       cleanPath = `/uploads${cleanPath}`;
+    } else if (cleanPath.startsWith('/flyers/')) {
+      cleanPath = `/uploads/userprofile${cleanPath.replace('/flyers/', '/')}`;
     } else {
       cleanPath = `/uploads/userprofile${cleanPath}`;
     }

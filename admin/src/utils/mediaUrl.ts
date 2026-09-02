@@ -10,19 +10,10 @@ export const getAdminMediaUrl = (imagePath?: string | null, fallback = ''): stri
   const trimmed = String(imagePath).trim();
   if (!trimmed) return fallback;
 
-  if (trimmed.startsWith('data:')) return trimmed;
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
 
   const apiUrl = getApiUrl();
   const serverUrl = apiUrl.replace(/\/api\/?$/, '');
-
-  const uploadsIndex = trimmed.indexOf('/uploads/');
-  if (uploadsIndex !== -1) {
-    const relativeUploadPath = trimmed.substring(uploadsIndex);
-    const apiUploadsPath = relativeUploadPath.startsWith('/api/')
-      ? relativeUploadPath
-      : `/api${relativeUploadPath}`;
-    return serverUrl ? `${serverUrl}${apiUploadsPath}` : apiUploadsPath;
-  }
 
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     if (trimmed.startsWith('http://') && (window.location.protocol === 'https:' || serverUrl.startsWith('https:'))) {
@@ -31,5 +22,16 @@ export const getAdminMediaUrl = (imagePath?: string | null, fallback = ''): stri
     return trimmed;
   }
 
-  return fallback;
+  // Handle all relative paths (e.g. /uploads/..., uploads/..., userprofile/..., flyers/..., or filename.jpg)
+  let cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  if (!cleanPath.startsWith('/uploads/') && !cleanPath.startsWith('/api/uploads/')) {
+    if (cleanPath.startsWith('/userprofile/') || cleanPath.startsWith('/flyers/')) {
+      cleanPath = `/uploads${cleanPath}`;
+    } else {
+      cleanPath = `/uploads/userprofile${cleanPath}`;
+    }
+  }
+
+  const apiUploadsPath = cleanPath.startsWith('/api/') ? cleanPath : `/api${cleanPath}`;
+  return serverUrl ? `${serverUrl}${apiUploadsPath}` : apiUploadsPath;
 };
