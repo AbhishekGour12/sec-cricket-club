@@ -351,6 +351,10 @@ const SingleCardSlot: React.FC<SingleCardSlotProps> = ({
               <View style={styles.tickBadge}>
                 <MaterialIcons name="check-circle" size={18} color="#4CAF50" />
               </View>
+              <Pressable style={styles.changeOverlayBadge} onPress={onChangeImage}>
+                <MaterialIcons name="edit" size={13} color="#FFFFFF" />
+                <Text style={styles.changeOverlayText}>Tap to Change</Text>
+              </Pressable>
             </View>
           ) : (
             <View style={styles.placeholderContent}>
@@ -378,9 +382,9 @@ const SingleCardSlot: React.FC<SingleCardSlotProps> = ({
               <Text style={styles.actionBtnText}>Preview</Text>
             </Pressable>
             <View style={styles.actionDivider} />
-            <Pressable style={styles.actionBtn} onPress={onChangeImage}>
+            <Pressable style={[styles.actionBtn, styles.actionBtnHighlight]} onPress={onChangeImage}>
               <MaterialIcons name="edit" size={14} color={Colors.secondary} />
-              <Text style={styles.actionBtnText}>Change</Text>
+              <Text style={[styles.actionBtnText, styles.actionBtnHighlightText]}>Change / Replace</Text>
             </Pressable>
             <View style={styles.actionDivider} />
             <Pressable style={styles.actionBtn} onPress={onRemove}>
@@ -503,6 +507,26 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 1,
   },
+  changeOverlayBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 8,
+    backgroundColor: 'rgba(14, 21, 37, 0.85)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  changeOverlayText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
 
   placeholderContent: {
     alignItems: 'center',
@@ -559,6 +583,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
     height: '100%',
+  },
+  actionBtnHighlight: {
+    backgroundColor: 'rgba(196, 18, 48, 0.06)',
+    borderRadius: 6,
+    marginVertical: 2,
+  },
+  actionBtnHighlightText: {
+    color: Colors.secondary,
+    fontWeight: '800',
   },
   actionBtnText: {
     fontSize: 11,

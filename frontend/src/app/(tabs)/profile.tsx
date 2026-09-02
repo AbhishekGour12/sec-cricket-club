@@ -367,7 +367,7 @@ export default function ProfileScreen() {
           <Text style={styles.accountTitle}>Account</Text>
 
           <Pressable
-            onPress={() => router.push('/profile-completion')}
+            onPress={() => router.push({ pathname: '/profile-completion', params: { mode: 'edit' } })}
             style={({ pressed }) => [styles.actionPressable, pressed && styles.actionPressed]}
             accessibilityRole="button"
             accessibilityLabel="Edit details and uploads"

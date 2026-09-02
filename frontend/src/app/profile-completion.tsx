@@ -12,7 +12,7 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { z } from 'zod';
 import { Colors, Typography, Spacing, Radius } from '@/theme';
@@ -87,10 +87,15 @@ const step4Schema = z.object({
 
 export default function ProfileCompletionScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string }>();
   const toast = useToast();
   const { user, refetchUser, logout } = useAuth();
   const storeUpdateUser = useAuthStore((state) => state.updateUser);
   const { step, formData, updateFormData, nextStep, prevStep, reset } = useProfileStore();
+
+  const isEditMode = params.mode === 'edit' || Boolean(user?.is_profile_completed);
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategoryText, setCustomCategoryText] = useState('');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState<string | null>(null); // tracks active field upload
@@ -139,6 +144,16 @@ export default function ProfileCompletionScreen() {
           ? draft.business_images
           : user.business_images || [],
     });
+
+    const currentCategory = draft.business_category || user.business_category || '';
+    if (currentCategory) {
+      if (!INDUSTRIES.includes(currentCategory) || currentCategory === 'Others') {
+        setIsCustomCategory(true);
+        if (currentCategory !== 'Others') {
+          setCustomCategoryText(currentCategory);
+        }
+      }
+    }
 
     queueMicrotask(() => {
       const savedCards = (user.visiting_card || '')
@@ -405,7 +420,11 @@ export default function ProfileCompletionScreen() {
       storeUpdateUser(response.data.user);
       await refetchUser();
 
-      toast.showSuccess('Registration Completed!', 'Your profile is pending administrator verification.');
+      if (isEditMode) {
+        toast.showSuccess('Profile Updated', 'Your profile details have been saved successfully.');
+      } else {
+        toast.showSuccess('Registration Completed!', 'Your profile is pending administrator verification.');
+      }
       reset();
       router.replace('/(tabs)/home');
     } catch (err: any) {
@@ -567,6 +586,19 @@ export default function ProfileCompletionScreen() {
               {errors.business_category && <Text style={styles.errorTextInline}>{errors.business_category}</Text>}
             </View>
 
+            {isCustomCategory && (
+              <Input
+                label="Custom Business Category"
+                placeholder="Enter your business category..."
+                value={customCategoryText}
+                onChangeText={(val) => {
+                  setCustomCategoryText(val);
+                  updateFormData({ business_category: val.trim() || 'Others' });
+                }}
+                error={errors.business_category}
+              />
+            )}
+
             <Input
               label="Website"
               placeholder="e.g. www.sterlingventures.com"
@@ -611,7 +643,12 @@ export default function ProfileCompletionScreen() {
               <Text style={styles.mediaTitle}>Business Logo</Text>
               <Pressable style={styles.logoPickerBox} onPress={() => pickImage('business-logo')}>
                 {formData.business_logo ? (
-                  <Image source={{ uri: getImageUrl(formData.business_logo) || undefined }} style={styles.logoImagePreview} />
+                  <View style={styles.logoWrapper}>
+                    <Image source={{ uri: getImageUrl(formData.business_logo) || undefined }} style={styles.logoImagePreview} />
+                    <View style={styles.logoEditBadge}>
+                      <ThemeIcon name="edit" size={14} color="#FFFFFF" />
+                    </View>
+                  </View>
                 ) : (
                   <View style={styles.placeholderBox}>
                     <ThemeIcon name="sports" size={32} color={Colors.text.outline} />
@@ -619,6 +656,12 @@ export default function ProfileCompletionScreen() {
                   </View>
                 )}
               </Pressable>
+              {formData.business_logo && (
+                <Pressable style={styles.logoChangeRow} onPress={() => pickImage('business-logo')}>
+                  <ThemeIcon name="edit" size={13} color={Colors.secondary} />
+                  <Text style={styles.logoChangeText}>Tap to change logo</Text>
+                </Pressable>
+              )}
               {isUploading === 'business-logo' && <ActivityIndicator size="small" color={Colors.secondary} />}
             </View>
 
@@ -718,7 +761,11 @@ export default function ProfileCompletionScreen() {
             <ThemeIcon name="arrowBack" size={24} color={Colors.text.primary} />
           </Pressable>
           <Text style={styles.headerTitleText}>
-            {step >= 2 ? 'Business Details' : 'Complete Your Profile'}
+            {isEditMode
+              ? 'Edit Profile & Details'
+              : step >= 2
+                ? 'Business Details'
+                : 'Complete Your Profile'}
           </Text>
           <Pressable style={styles.headerLogoutBtn} onPress={handleLogout}>
             <ThemeIcon name="logout" size={22} color={Colors.secondary} />
@@ -771,7 +818,9 @@ export default function ProfileCompletionScreen() {
               {isSubmitting ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.btnPrimaryFullText}>COMPLETE REGISTRATION</Text>
+                <Text style={styles.btnPrimaryFullText}>
+                  {isEditMode ? 'SAVE CHANGES' : 'COMPLETE REGISTRATION'}
+                </Text>
               )}
             </Pressable>
           ) : (
@@ -799,7 +848,15 @@ export default function ProfileCompletionScreen() {
           visible={categoryModal}
           options={INDUSTRIES}
           title="Select Industry Category"
-          onSelect={(opt) => updateFormData({ business_category: opt })}
+          onSelect={(opt) => {
+            if (opt === 'Others') {
+              setIsCustomCategory(true);
+              updateFormData({ business_category: customCategoryText || 'Others' });
+            } else {
+              setIsCustomCategory(false);
+              updateFormData({ business_category: opt });
+            }
+          }}
           onClose={() => setCategoryModal(false)}
         />
       </KeyboardAvoidingView>
@@ -1080,10 +1137,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  logoWrapper: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   logoImagePreview: {
     width: '100%',
     height: '100%',
     resizeMode: 'contain',
+  },
+  logoEditBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  logoChangeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 6,
+    paddingVertical: 4,
+  },
+  logoChangeText: {
+    ...Typography.caption,
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.secondary,
   },
   placeholderBox: {
     alignItems: 'center',

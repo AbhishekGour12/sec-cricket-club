@@ -94,6 +94,21 @@ const PRESET_CATEGORIES = [
   'Others',
 ];
 
+export function parseVisitingCards(raw?: string | null): string[] {
+  if (!raw) return [];
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parsed.map((s) => String(s).trim()).filter(Boolean);
+    } catch {
+      // fallback to comma split
+    }
+  }
+  return trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
 export const Members: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [rawMembersList, setRawMembersList] = useState<Member[]>([]);
@@ -104,12 +119,18 @@ export const Members: React.FC = () => {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>(PRESET_CATEGORIES);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Business Category Management
+  const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
+  const [newCategoryInput, setNewCategoryInput] = useState('');
+  const [isManualCustomCategory, setIsManualCustomCategory] = useState(false);
+  const [manualCustomCategory, setManualCustomCategory] = useState('');
   
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'approved' | 'pending' | 'rejected'>('approved');
@@ -198,10 +219,26 @@ export const Members: React.FC = () => {
       const response = await axios.get(`${apiURL}/members/categories`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setCategories(response.data.categories || PRESET_CATEGORIES);
+      const backendCats: string[] = response.data.categories || [];
+      const merged = Array.from(new Set([...PRESET_CATEGORIES, ...backendCats]));
+      setCategories(merged);
     } catch {
       setCategories(PRESET_CATEGORIES);
     }
+  };
+
+  const handleAddNewCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newCategoryInput.trim();
+    if (!trimmed) return;
+    if (!categories.includes(trimmed)) {
+      setCategories((prev) => [...prev, trimmed]);
+    }
+    setCategoryFilter(trimmed);
+    setNewCategoryInput('');
+    setIsAddCategoryModalOpen(false);
+    setSuccessMessage(`Business category "${trimmed}" added!`);
+    setTimeout(() => setSuccessMessage(null), 3000);
   };
 
   useEffect(() => {
@@ -500,14 +537,31 @@ export const Members: React.FC = () => {
     setManualErrors({});
     setIsSubmittingManual(true);
 
+    const finalCategory = isManualCustomCategory
+      ? (manualCustomCategory.trim() || 'Others')
+      : manualForm.business_category;
+
+    const payload = {
+      ...manualForm,
+      business_category: finalCategory,
+    };
+
     try {
       await axios.post(
         `${apiURL}/admin/members/create-manual`,
-        manualForm,
+        payload,
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      if (isManualCustomCategory && manualCustomCategory.trim()) {
+        const cat = manualCustomCategory.trim();
+        if (!categories.includes(cat)) {
+          setCategories(prev => [...prev, cat]);
+        }
+      }
       setSuccessMessage(`Member "${manualForm.full_name}" registered successfully.`);
       setIsAddModalOpen(false);
+      setIsManualCustomCategory(false);
+      setManualCustomCategory('');
       setManualForm({
         full_name: '',
         email: '',
@@ -822,6 +876,16 @@ export const Members: React.FC = () => {
                 <option key={idx} value={cat}>{cat}</option>
               ))}
             </select>
+
+            <button
+              type="button"
+              onClick={() => setIsAddCategoryModalOpen(true)}
+              className="bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl px-3 py-2.5 text-xs text-[#0E1525] font-bold flex items-center gap-1.5 transition-colors shrink-0"
+              title="Add New Business Category"
+            >
+              <Plus size={13} className="text-[#C41230]" />
+              <span>Add Category</span>
+            </button>
 
             <select
               value={pageSize}
@@ -1226,16 +1290,96 @@ export const Members: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Visiting Card / Identity Assets */}
-                  {selectedMember.visiting_card && (
+                  {/* Business Logo */}
+                  {selectedMember.business_logo && (
                     <div>
-                      <h3 className="text-xs font-bold text-[#1A2744] uppercase tracking-wider mb-3">Identity Proof &amp; Visiting Card</h3>
-                      <div className="border border-slate-200 rounded-xl overflow-hidden p-2 bg-slate-50">
+                      <h3 className="text-xs font-bold text-[#1A2744] uppercase tracking-wider mb-3">Business Logo</h3>
+                      <div className="border border-slate-200 rounded-xl p-3 bg-slate-50 flex items-center gap-3">
                         <img 
-                          src={getImageUrl(selectedMember.visiting_card)} 
-                          alt="Visiting Card" 
-                          className="w-full h-48 object-contain rounded-lg bg-white border"
+                          src={getImageUrl(selectedMember.business_logo)} 
+                          alt="Business Logo" 
+                          className="w-16 h-16 object-contain rounded-lg bg-white border border-slate-200 p-1"
+                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
                         />
+                        <div>
+                          <p className="font-bold text-xs text-[#0E1525]">{selectedMember.business_name || 'Business Logo'}</p>
+                          <p className="text-[11px] text-slate-400">Official Brand Logo</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Visiting Card / Identity Assets (Supports Multiple / Front & Back) */}
+                  {(() => {
+                    const cards = parseVisitingCards(selectedMember.visiting_card);
+                    if (cards.length === 0) return null;
+                    const labels = ['Front Side', 'Back Side'];
+                    return (
+                      <div>
+                        <h3 className="text-xs font-bold text-[#1A2744] uppercase tracking-wider mb-3">
+                          Visiting Card ({cards.length})
+                        </h3>
+                        <div className={`grid ${cards.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} gap-3`}>
+                          {cards.map((cardPath, cIdx) => (
+                            <div key={cIdx} className="border border-slate-200 rounded-xl overflow-hidden p-2 bg-slate-50">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1.5 px-1">
+                                {labels[cIdx] || `Card Image ${cIdx + 1}`}
+                              </span>
+                              <a
+                                href={getImageUrl(cardPath)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block group relative"
+                                title="Click to open full resolution image"
+                              >
+                                <img 
+                                  src={getImageUrl(cardPath)} 
+                                  alt={`Visiting Card ${labels[cIdx] || cIdx + 1}`} 
+                                  className="w-full h-44 object-contain rounded-lg bg-white border border-slate-200"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="60" viewBox="0 0 100 60"><rect width="100" height="60" fill="%23f1f5f9"/><text x="50" y="32" font-size="9" text-anchor="middle" fill="%2394a3b8">Card Image</text></svg>';
+                                  }}
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center text-white text-xs font-bold gap-1">
+                                  <Eye size={15} />
+                                  <span>View Full Image</span>
+                                </div>
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Product & Business Showcase Images */}
+                  {selectedMember.business_images && selectedMember.business_images.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-bold text-[#1A2744] uppercase tracking-wider mb-3">
+                        Showcase Images ({selectedMember.business_images.length})
+                      </h3>
+                      <div className="grid grid-cols-3 gap-2">
+                        {selectedMember.business_images.map((img, i) => (
+                          <a key={i} href={getImageUrl(img)} target="_blank" rel="noreferrer" className="block aspect-square rounded-lg overflow-hidden border border-slate-200 bg-white">
+                            <img src={getImageUrl(img)} alt={`Showcase ${i + 1}`} className="w-full h-full object-cover" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Business Flyers */}
+                  {selectedMember.business_flyers && selectedMember.business_flyers.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-bold text-[#1A2744] uppercase tracking-wider mb-3">
+                        Business Flyers ({selectedMember.business_flyers.length})
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {selectedMember.business_flyers.map((flyer) => (
+                          <a key={flyer.id} href={getImageUrl(flyer.image_url)} target="_blank" rel="noreferrer" className="block aspect-[3/4] rounded-lg overflow-hidden border border-slate-200 bg-white">
+                            <img src={getImageUrl(flyer.image_url)} alt="Flyer" className="w-full h-full object-cover" />
+                          </a>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -1556,14 +1700,34 @@ export const Members: React.FC = () => {
                       Business Category
                     </label>
                     <select
-                      value={manualForm.business_category}
-                      onChange={(e) => setManualForm({ ...manualForm, business_category: e.target.value })}
+                      value={isManualCustomCategory ? 'Others' : manualForm.business_category}
+                      onChange={(e) => {
+                        if (e.target.value === 'Others') {
+                          setIsManualCustomCategory(true);
+                          setManualForm({ ...manualForm, business_category: manualCustomCategory.trim() || 'Others' });
+                        } else {
+                          setIsManualCustomCategory(false);
+                          setManualForm({ ...manualForm, business_category: e.target.value });
+                        }
+                      }}
                       className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
                     >
                       {categories.map((c, i) => (
                         <option key={i} value={c}>{c}</option>
                       ))}
                     </select>
+                    {isManualCustomCategory && (
+                      <input
+                        type="text"
+                        placeholder="Enter custom business category..."
+                        value={manualCustomCategory}
+                        onChange={(e) => {
+                          setManualCustomCategory(e.target.value);
+                          setManualForm({ ...manualForm, business_category: e.target.value.trim() || 'Others' });
+                        }}
+                        className="w-full mt-2 px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
+                      />
+                    )}
                   </div>
 
                   <div>
@@ -1768,6 +1932,60 @@ export const Members: React.FC = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+        {/* Add Business Category Modal */}
+        {isAddCategoryModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#111B30]/80 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-5 text-[#0E1525] border border-slate-200">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-3">
+                <h3 className="font-extrabold text-sm text-[#1A2744]">Add Business Category</h3>
+                <button
+                  onClick={() => {
+                    setIsAddCategoryModalOpen(false);
+                    setNewCategoryInput('');
+                  }}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <form onSubmit={handleAddNewCategory} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-[#3A4260] uppercase mb-1">
+                    Category Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    placeholder="e.g. Solar Energy, Legal Services..."
+                    value={newCategoryInput}
+                    onChange={(e) => setNewCategoryInput(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-[#C41230]"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddCategoryModalOpen(false);
+                      setNewCategoryInput('');
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!newCategoryInput.trim()}
+                    className="px-4 py-1.5 text-xs font-bold bg-[#C41230] text-white rounded-xl hover:bg-[#9E0E27] disabled:opacity-50 transition-colors shadow"
+                  >
+                    Add Category
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

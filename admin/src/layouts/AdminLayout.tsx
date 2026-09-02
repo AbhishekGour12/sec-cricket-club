@@ -355,12 +355,22 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
   ];
 
   // Global Quick Commands / Navigation Options
-  const commandOptions = [
+  interface CommandOption {
+    title: string;
+    desc: string;
+    path?: string;
+    icon: React.ReactNode;
+    action?: () => void;
+  }
+
+  const commandOptions: CommandOption[] = [
     { title: 'Dashboard Overview', desc: 'View live club KPIs & metrics', path: '/', icon: <LayoutDashboard size={18} /> },
     { title: 'Approved Members', desc: 'Active member directory and profiles', path: '/members?tab=approved', icon: <UserCheck size={18} /> },
     { title: 'Pending Applications', desc: `Review member approvals (${pendingCount} pending)`, path: '/members?tab=pending', icon: <UserPlus size={18} /> },
     { title: 'Add Member Form', desc: 'Register a new member profile offline', path: '/members?tab=add', icon: <Users size={18} /> },
     { title: 'Import Members CSV', desc: 'Bulk import member roster from spreadsheet', path: '/members?tab=import', icon: <Users size={18} /> },
+    { title: 'Edit Profile', desc: 'Update admin account name and profile avatar', path: '/?action=edit-profile', icon: <UserCog size={18} />, action: openEditProfile },
+    { title: 'Change Password', desc: 'Update admin security password & credentials', path: '/?action=change-password', icon: <KeyRound size={18} />, action: openChangePassword },
     { title: 'Events & Matches', desc: 'Create and publish club tournaments', path: '/events', icon: <Calendar size={18} /> },
     { title: 'Announcements', desc: 'Broadcast notices and club updates', path: '/announcements', icon: <Megaphone size={18} /> },
     { title: 'System Notifications', desc: 'View complete notification history', path: '/notifications', icon: <Bell size={18} /> },
@@ -774,7 +784,11 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
                     onClick={() => {
                       setIsSearchPaletteOpen(false);
                       setGlobalSearchQuery('');
-                      navigate(cmd.path);
+                      if (cmd.action) {
+                        cmd.action();
+                      } else if (cmd.path) {
+                        navigate(cmd.path);
+                      }
                     }}
                     className="p-3 rounded-xl flex items-center justify-between hover:bg-[#243260] cursor-pointer transition-colors group"
                   >

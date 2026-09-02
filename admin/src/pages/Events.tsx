@@ -19,7 +19,8 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  Ban
+  Ban,
+  Loader2
 } from 'lucide-react';
 import { AdminLayout } from '../layouts/AdminLayout';
 import { getAdminMediaUrl } from '../utils/mediaUrl';
@@ -189,6 +190,7 @@ export const Events: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<EventForm>(EMPTY_FORM);
   const [imageUploading, setImageUploading] = useState(false);
+  const [sponsorUploadingIndex, setSponsorUploadingIndex] = useState<number | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const [previewItem, setPreviewItem] = useState<ClubEvent | null>(null);
@@ -379,6 +381,26 @@ export const Events: React.FC = () => {
       setError(err.response?.data?.message || 'Failed to upload event image.');
     } finally {
       setImageUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSponsorLogoUpload = async (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Sponsor logo must be an image file.');
+      return;
+    }
+    setSponsorUploadingIndex(idx);
+    setError(null);
+    try {
+      const url = await uploadEventImage(file);
+      updateSponsor(idx, { logo: url });
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to upload sponsor logo.');
+    } finally {
+      setSponsorUploadingIndex(null);
       e.target.value = '';
     }
   };
@@ -1134,7 +1156,7 @@ export const Events: React.FC = () => {
                   </div>
 
                   {form.sponsors.map((s, idx) => (
-                    <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-1 sm:grid-cols-4 gap-2 items-center">
+                    <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-1 sm:grid-cols-4 gap-2 items-start">
                       <input
                         type="text"
                         placeholder="Sponsor Name *"
@@ -1151,13 +1173,46 @@ export const Events: React.FC = () => {
                           <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
-                      <input
-                        type="text"
-                        placeholder="Logo URL *"
-                        value={s.logo}
-                        onChange={(e) => updateSponsor(idx, { logo: e.target.value })}
-                        className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs"
-                      />
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            placeholder="Logo URL or Upload *"
+                            value={s.logo}
+                            onChange={(e) => updateSponsor(idx, { logo: e.target.value })}
+                            className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs"
+                          />
+                          <label 
+                            className="cursor-pointer px-2 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 shrink-0 transition-colors shadow-sm"
+                            title="Upload Sponsor Logo File"
+                          >
+                            {sponsorUploadingIndex === idx ? (
+                              <Loader2 size={13} className="animate-spin text-[#C41230]" />
+                            ) : (
+                              <Upload size={13} />
+                            )}
+                            <span className="hidden sm:inline">{sponsorUploadingIndex === idx ? 'Uploading…' : 'File'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              disabled={sponsorUploadingIndex !== null}
+                              onChange={(e) => handleSponsorLogoUpload(idx, e)}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                        {s.logo && (
+                          <div className="flex items-center gap-2 px-1">
+                            <img
+                              src={getImageUrl(s.logo)}
+                              alt="Logo preview"
+                              className="h-6 w-auto max-w-[50px] object-contain rounded border border-slate-200 bg-white"
+                              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                            />
+                            <span className="text-[10px] text-slate-400 truncate max-w-[120px]">{s.logo}</span>
+                          </div>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2">
                         <input
                           type="url"

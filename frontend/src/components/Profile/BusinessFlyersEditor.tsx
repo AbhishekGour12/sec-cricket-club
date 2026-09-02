@@ -272,7 +272,10 @@ export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorPr
                 {uri ? (
                   <Image source={{ uri }} style={styles.cardImage} contentFit="cover" />
                 ) : (
-                  <View style={[styles.cardImage, styles.cardFallback]} />
+                  <View style={styles.cardFallback}>
+                    <ThemeIcon name="business" size={32} color={Colors.text.outline} />
+                    <Text style={styles.cardFallbackText}>Flyer {index + 1}</Text>
+                  </View>
                 )}
                 {isBusy && (
                   <View style={styles.cardOverlay}>
@@ -387,6 +390,7 @@ const styles = StyleSheet.create({
   card: {
     width: '47%',
     aspectRatio: 3 / 4,
+    minHeight: 180,
     borderRadius: Radius.md,
     overflow: 'hidden',
     backgroundColor: Colors.surface,
@@ -397,7 +401,19 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   cardFallback: {
+    width: '100%',
+    height: '100%',
     backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.sm,
+  },
+  cardFallbackText: {
+    ...Typography.caption,
+    fontSize: 12,
+    color: Colors.text.outline,
+    marginTop: 6,
+    fontWeight: '600',
   },
   cardOverlay: {
     ...StyleSheet.absoluteFill,
@@ -424,6 +440,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   addCard: {
+    minHeight: 180,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,

@@ -97,13 +97,25 @@ export class MemberController {
    */
   public static async getCategories(_req: any, res: Response): Promise<void> {
     try {
+      const DEFAULT_CATEGORIES = [
+        'Manufacturing & Production',
+        'Technology & IT',
+        'Retail & Commerce',
+        'Services & Consulting',
+        'Healthcare & Medicine',
+        'Real Estate & Construction',
+        'Finance & Banking',
+        'Education & Training',
+        'Food & Hospitality',
+        'Agriculture',
+        'Others',
+      ];
+
       const categoriesData = await User.findAll({
         attributes: [
           [sequelize.fn('DISTINCT', sequelize.col('business_category')), 'business_category'],
         ],
         where: {
-          approval_status: 'approved',
-          status: 'active',
           business_category: {
             [Op.and]: [{ [Op.ne]: null as any }, { [Op.ne]: '' }],
           } as any,
@@ -111,9 +123,11 @@ export class MemberController {
         raw: true,
       });
 
-      const categories = categoriesData
-        .map((c: any) => c.business_category)
+      const dbCategories = categoriesData
+        .map((c: any) => (c.business_category ? String(c.business_category).trim() : ''))
         .filter((c): c is string => !!c);
+
+      const categories = Array.from(new Set([...DEFAULT_CATEGORIES, ...dbCategories]));
 
       res.status(200).json({ categories });
     } catch (error) {
