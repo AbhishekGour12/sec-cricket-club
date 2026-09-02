@@ -435,8 +435,8 @@ export class BusinessFlyerController {
       }
 
       const count = await BusinessFlyer.count({ where: { user_id: memberId } });
-      if (count >= 10) {
-        res.status(400).json({ error: 'Bad Request', message: 'Maximum of 10 business flyers reached for this member' });
+      if (count >= 5) {
+        res.status(400).json({ error: 'Bad Request', message: 'Maximum of 5 business flyers reached for this member' });
         return;
       }
 

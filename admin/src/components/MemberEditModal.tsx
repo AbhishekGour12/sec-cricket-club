@@ -239,9 +239,9 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
       }
 
       if (field === 'flyer') {
-        const remaining = 10 - flyers.length;
+        const remaining = 5 - flyers.length;
         if (remaining <= 0) {
-          setError('Maximum 10 business flyers allowed.');
+          setError('Maximum 5 business flyers allowed. Please remove existing ones first.');
           return;
         }
 
@@ -263,7 +263,11 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
         }
 
         setFlyers((prev) => [...prev, ...newFlyers]);
-        setSuccess(`${newFlyers.length} flyer(s) uploaded successfully!`);
+        if (fileArray.length > remaining) {
+          setSuccess(`Uploaded ${newFlyers.length} flyer(s). (Business flyers limit is 5)`);
+        } else {
+          setSuccess(`${newFlyers.length} flyer(s) uploaded successfully!`);
+        }
         setTimeout(() => setSuccess(null), 2500);
         return;
       }
@@ -319,6 +323,10 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
   const handleAddFlyerUrl = async () => {
     const trimmed = newFlyerUrl.trim();
     if (!trimmed) return;
+    if (flyers.length >= 5) {
+      setError('Maximum 5 business flyers allowed. Please remove existing ones first.');
+      return;
+    }
     setFlyerUploading(true);
     setError(null);
     try {
@@ -818,9 +826,9 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-[#1A2744] uppercase tracking-wider">
-                  Business Flyers ({flyers.length})
+                  Business Flyers ({flyers.length}/5 Flyers)
                 </span>
-                <span className="text-[11px] text-slate-400">Promotional marketing flyers</span>
+                <span className="text-[11px] text-slate-400">Promotional marketing flyers (max 5)</span>
               </div>
 
               {flyerLoading ? (
@@ -868,47 +876,53 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                 </div>
               )}
 
-              {/* Add New Flyer */}
-              <div className="pt-2 border-t border-slate-200/80 flex flex-col sm:flex-row items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Paste Flyer image URL..."
-                  value={newFlyerUrl}
-                  onChange={(e) => setNewFlyerUrl(e.target.value)}
-                  className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
-                />
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={handleAddFlyerUrl}
-                    disabled={!newFlyerUrl.trim() || flyerUploading}
-                    className="px-3 py-1.5 bg-[#1A2744] text-white rounded-lg text-xs font-bold hover:bg-[#111B30] disabled:opacity-50"
-                  >
-                    Add by URL
-                  </button>
-                  <label className="cursor-pointer px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-colors">
-                    {uploadingField === 'flyer' ? (
-                      <Loader2 size={13} className="animate-spin text-[#C41230]" />
-                    ) : (
-                      <Upload size={13} />
-                    )}
-                    <span>{uploadingField === 'flyer' ? 'Uploading...' : 'Upload Flyers (Multi-select)'}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      disabled={uploadingField !== null}
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files.length > 0) {
-                          handleFilesUpload('flyer', e.target.files);
-                        }
-                        e.target.value = '';
-                      }}
-                      className="hidden"
-                    />
-                  </label>
+              {/* Add New Flyer (Allowed up to 5 flyers) */}
+              {flyers.length < 5 ? (
+                <div className="pt-2 border-t border-slate-200/80 flex flex-col sm:flex-row items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Paste Flyer image URL..."
+                    value={newFlyerUrl}
+                    onChange={(e) => setNewFlyerUrl(e.target.value)}
+                    className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                  />
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={handleAddFlyerUrl}
+                      disabled={!newFlyerUrl.trim() || flyerUploading}
+                      className="px-3 py-1.5 bg-[#1A2744] text-white rounded-lg text-xs font-bold hover:bg-[#111B30] disabled:opacity-50"
+                    >
+                      Add by URL
+                    </button>
+                    <label className="cursor-pointer px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-colors">
+                      {uploadingField === 'flyer' ? (
+                        <Loader2 size={13} className="animate-spin text-[#C41230]" />
+                      ) : (
+                        <Upload size={13} />
+                      )}
+                      <span>{uploadingField === 'flyer' ? 'Uploading...' : 'Upload Flyers (Multi-select)'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={uploadingField !== null}
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            handleFilesUpload('flyer', e.target.files);
+                          }
+                          e.target.value = '';
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 italic pt-1 border-t border-slate-200/80">
+                  Maximum limit of 5 business flyers reached. Remove an existing flyer to add a new one.
+                </p>
+              )}
             </div>
           </section>
 
