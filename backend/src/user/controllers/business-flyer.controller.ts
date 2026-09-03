@@ -9,9 +9,36 @@ import { logger } from '../../utils/logger';
 import { AuthenticatedRequest } from '../middlewares/verifyJwt';
 
 const MAX_FLYERS = 5;
-const MAX_FILE_BYTES = 5 * 1024 * 1024;
-const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
-const ALLOWED_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_MIME = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/svg+xml',
+  'image/bmp',
+  'image/tiff',
+  'image/heic',
+  'image/heif',
+  'image/avif',
+  'image/x-icon',
+]);
+const ALLOWED_EXT = new Set([
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.gif',
+  '.svg',
+  '.bmp',
+  '.tiff',
+  '.tif',
+  '.heic',
+  '.heif',
+  '.avif',
+  '.ico',
+]);
 
 const uploadsDir = path.resolve(__dirname, '../../../uploads/userprofile');
 
@@ -57,6 +84,9 @@ const deleteFileQuietly = (filePath: string) => {
  */
 const compressImage = async (filePath: string, mimeType: string): Promise<void> => {
   const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.svg' || mimeType === 'image/svg+xml') {
+    return; // Don't re-encode vector SVG
+  }
   const tempPath = `${filePath}.tmp`;
 
   let pipeline = sharp(filePath).rotate().resize({
@@ -153,7 +183,7 @@ export class BusinessFlyerController {
         deleteFileQuietly(file.path);
         res.status(400).json({
           error: 'Bad Request',
-          message: 'Only JPG, JPEG, PNG, and WEBP images are allowed',
+          message: 'Supported image formats: JPG, PNG, WEBP, GIF, SVG, BMP, TIFF, HEIC, AVIF',
         });
         return;
       }
@@ -162,7 +192,7 @@ export class BusinessFlyerController {
         deleteFileQuietly(file.path);
         res.status(400).json({
           error: 'Bad Request',
-          message: 'Image must be 5 MB or smaller',
+          message: 'Image must be 10 MB or smaller',
         });
         return;
       }

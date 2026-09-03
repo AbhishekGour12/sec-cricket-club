@@ -31,6 +31,7 @@ import {
 import { AdminLayout } from '../layouts/AdminLayout';
 import { getAdminMediaUrl } from '../utils/mediaUrl';
 import { getApiUrl } from '../lib/api';
+import { useToast } from '../components/Toast';
 
 const ANNOUNCEMENT_TYPES = [
   'General',
@@ -146,6 +147,7 @@ export const Announcements: React.FC = () => {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Announcement | null>(null);
 
+  const toast = useToast();
   const apiURL = getApiUrl();
   const token = localStorage.getItem('admin_jwt');
   const limit = 10;
@@ -335,17 +337,32 @@ export const Announcements: React.FC = () => {
     e.preventDefault();
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setError('Cover must be an image file.');
+
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|svg|avif|bmp|heic|heif|ico)$/i.test(file.name);
+    if (!isImage) {
+      const msg = 'Cover must be a valid image file (JPG, PNG, WEBP, GIF, SVG, AVIF, HEIC, etc.).';
+      setError(msg);
+      toast.error(msg, 'Invalid Image Format');
       return;
     }
+
+    if (file.size > 10 * 1024 * 1024) {
+      const msg = 'Cover image size exceeds 10MB limit. Maximum allowed size is 10MB.';
+      setError(msg);
+      toast.error(msg, 'File Too Large');
+      return;
+    }
+
     setCoverUploading(true);
     setError(null);
     try {
       const url = await uploadCoverImage(file);
       setForm((prev) => ({ ...prev, cover_image: url }));
+      toast.success('Cover image uploaded successfully!');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to upload cover image.');
+      const msg = err.response?.data?.message || err.response?.data?.error?.message || 'Failed to upload cover image.';
+      setError(msg);
+      toast.error(msg, 'Upload Failed');
     } finally {
       setCoverUploading(false);
       e.target.value = '';
@@ -1052,13 +1069,20 @@ export const Announcements: React.FC = () => {
                         <input
                           ref={coverInputRef}
                           type="file"
-                          accept="image/*"
+                          accept="image/*, .jpg, .jpeg, .png, .webp, .gif, .svg, .avif, .bmp, .heic, .heif"
                           onChange={handleCoverUpload}
                           className="hidden"
                           disabled={coverUploading}
                         />
                       </label>
                     </div>
+                    <p className="text-[11px] text-slate-500 mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span>Supported: <strong className="text-slate-700">All image formats (JPG, PNG, WEBP, GIF, SVG, AVIF, HEIC)</strong></span>
+                      <span>•</span>
+                      <span>Max size: <strong className="text-slate-700">10MB</strong></span>
+                      <span>•</span>
+                      <span>Recommended: <strong className="text-slate-700">16:9 ratio</strong></span>
+                    </p>
                   </div>
 
                   {/* Pin switch */}

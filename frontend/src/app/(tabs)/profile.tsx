@@ -144,7 +144,13 @@ export default function ProfileScreen() {
       return;
     }
 
-    const pickedUri = result.assets[0].uri;
+    const asset = result.assets[0];
+    if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
+      toast.showError('File Too Large', 'Visiting card image exceeds 10MB limit. Please choose a photo under 10MB.');
+      return;
+    }
+
+    const pickedUri = asset.uri;
     if (side === 'front') {
       setLocalFrontUri(pickedUri);
     } else {

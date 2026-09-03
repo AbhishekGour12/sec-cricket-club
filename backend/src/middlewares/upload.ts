@@ -47,21 +47,62 @@ const storage = multer.diskStorage({
   },
 });
 
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const ALLOWED_IMAGE_MIMES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/svg+xml',
+  'image/bmp',
+  'image/tiff',
+  'image/heic',
+  'image/heif',
+  'image/avif',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+]);
+
+const ALLOWED_IMAGE_EXTS = new Set([
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.gif',
+  '.svg',
+  '.bmp',
+  '.tiff',
+  '.tif',
+  '.heic',
+  '.heif',
+  '.avif',
+  '.ico',
+]);
+
+export const isAllowedImage = (file: any): boolean => {
+  const mime = (file.mimetype || '').toLowerCase();
+  const ext = path.extname(file.originalname || file.filename || '').toLowerCase();
+  return (
+    mime.startsWith('image/') ||
+    ALLOWED_IMAGE_MIMES.has(mime) ||
+    ALLOWED_IMAGE_EXTS.has(ext)
+  );
+};
 
 const imageFileFilter = (_req: any, file: any, cb: any) => {
-  if (ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
+  if (isAllowedImage(file)) {
     cb(null, true);
   } else {
-    cb(new Error('Only jpg, png, webp, and gif images are allowed'), false);
+    cb(new Error('Invalid image format. Supported formats: JPG, PNG, WEBP, GIF, SVG, BMP, TIFF, HEIC, AVIF, ICO'), false);
   }
 };
 
 const announcementFileFilter = (_req: any, file: any, cb: any) => {
-  if (ALLOWED_IMAGE_TYPES.has(file.mimetype) || file.mimetype === 'application/pdf') {
+  const isPdf = file.mimetype === 'application/pdf' || path.extname(file.originalname || '').toLowerCase() === '.pdf';
+  if (isAllowedImage(file) || isPdf) {
     cb(null, true);
   } else {
-    cb(new Error('Only jpg, png, webp, gif, and PDF files are allowed'), false);
+    cb(new Error('Invalid file format. Supported formats: Images (JPG, PNG, WEBP, GIF, SVG, AVIF, etc.) and PDF documents'), false);
   }
 };
 
@@ -69,7 +110,7 @@ export const upload = multer({
   storage,
   fileFilter: imageFileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // Allow up to 10MB images
+    fileSize: 10 * 1024 * 1024, // 10MB max
   },
 });
 
@@ -78,43 +119,34 @@ export const uploadAnnouncement = multer({
   storage,
   fileFilter: announcementFileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024,
+    fileSize: 10 * 1024 * 1024, // 10MB max
   },
 });
 
-/** Stricter filter for business flyers: JPG/JPEG/PNG/WEBP only, 5 MB max. */
-const flyerFileFilter = (_req: any, file: any, cb: any) => {
-  const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-  if (allowed.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only JPG, JPEG, PNG, and WEBP images are allowed'), false);
-  }
-};
-
+/** Business flyers: all image formats, 10 MB max. */
 export const uploadBusinessFlyer = multer({
   storage,
-  fileFilter: flyerFileFilter,
+  fileFilter: imageFileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024,
+    fileSize: 10 * 1024 * 1024, // 10MB max
   },
 });
 
-/** Event banners: JPG/JPEG/PNG/WEBP, 10 MB max. */
+/** Event banners: all image formats, 10 MB max. */
 export const uploadEvent = multer({
   storage,
-  fileFilter: flyerFileFilter,
+  fileFilter: imageFileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024,
+    fileSize: 10 * 1024 * 1024, // 10MB max
   },
 });
 
-/** Sponsor logos: JPG/PNG/WEBP, 2 MB max. */
+/** Sponsor logos: all image formats, 5 MB max. */
 export const uploadSponsor = multer({
   storage,
-  fileFilter: flyerFileFilter,
+  fileFilter: imageFileFilter,
   limits: {
-    fileSize: 2 * 1024 * 1024,
+    fileSize: 5 * 1024 * 1024, // 5MB max
   },
 });
 

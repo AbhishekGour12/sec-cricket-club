@@ -13,6 +13,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { getAdminMediaUrl } from '../utils/mediaUrl';
+import { useToast } from './Toast';
 
 export interface Achievement {
   id: string;
@@ -187,6 +188,8 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
     if (member.id) fetchFlyers();
   }, [member.id, apiURL, token]);
 
+  const toast = useToast();
+
   const setField = (key: keyof EditableMember, value: any) =>
     setForm((current) => ({ ...current, [key]: value }));
 
@@ -195,12 +198,30 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
     field: 'profile_image' | 'business_logo' | 'card_front' | 'card_back' | 'showcase' | 'flyer',
     files: FileList | File[]
   ) => {
-    const fileArray = Array.from(files).filter((f) => f.type.startsWith('image/'));
-    if (fileArray.length === 0) {
-      setError('Selected file(s) must be valid images.');
+    const rawFiles = Array.from(files);
+    if (rawFiles.length === 0) return;
+
+    // Check for non-image files
+    const invalidFiles = rawFiles.filter(
+      (f) => !f.type.startsWith('image/') && !/\.(jpe?g|png|webp|gif|svg|avif|bmp|heic|heif|ico)$/i.test(f.name)
+    );
+    if (invalidFiles.length > 0) {
+      const msg = `"${invalidFiles[0].name}" is not a valid image format. Supported formats: JPG, PNG, WEBP, GIF, SVG, AVIF, HEIC.`;
+      setError(msg);
+      toast.error(msg, 'Invalid Image Format');
       return;
     }
 
+    // Check file size (max 10MB per file)
+    const oversized = rawFiles.filter((f) => f.size > 10 * 1024 * 1024);
+    if (oversized.length > 0) {
+      const msg = `"${oversized[0].name}" (${(oversized[0].size / (1024 * 1024)).toFixed(1)}MB) exceeds the 10MB size limit.`;
+      setError(msg);
+      toast.error(msg, 'File Too Large');
+      return;
+    }
+
+    const fileArray = rawFiles;
     setUploadingField(field);
     setError(null);
 
@@ -208,7 +229,9 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
       if (field === 'showcase') {
         const remaining = 5 - businessImages.length;
         if (remaining <= 0) {
-          setError('Maximum 5 showcase images allowed. Please remove existing ones first.');
+          const msg = 'Maximum 5 showcase images allowed. Please remove existing ones first.';
+          setError(msg);
+          toast.warning(msg, 'Gallery Full');
           return;
         }
 
@@ -229,11 +252,11 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
         }
 
         setBusinessImages((prev) => [...prev, ...uploadedUrls].slice(0, 5));
-        if (fileArray.length > remaining) {
-          setSuccess(`Uploaded ${uploadedUrls.length} image(s). (Showcase gallery limit is 5 images)`);
-        } else {
-          setSuccess(`${uploadedUrls.length} showcase image(s) uploaded successfully!`);
-        }
+        const successMsg = fileArray.length > remaining
+          ? `Uploaded ${uploadedUrls.length} image(s). (Showcase gallery limit is 5 images)`
+          : `${uploadedUrls.length} showcase image(s) uploaded successfully!`;
+        setSuccess(successMsg);
+        toast.success(successMsg);
         setTimeout(() => setSuccess(null), 2500);
         return;
       }
@@ -241,7 +264,9 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
       if (field === 'flyer') {
         const remaining = 5 - flyers.length;
         if (remaining <= 0) {
-          setError('Maximum 5 business flyers allowed. Please remove existing ones first.');
+          const msg = 'Maximum 5 business flyers allowed. Please remove existing ones first.';
+          setError(msg);
+          toast.warning(msg, 'Flyers Limit Reached');
           return;
         }
 
@@ -263,11 +288,11 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
         }
 
         setFlyers((prev) => [...prev, ...newFlyers]);
-        if (fileArray.length > remaining) {
-          setSuccess(`Uploaded ${newFlyers.length} flyer(s). (Business flyers limit is 5)`);
-        } else {
-          setSuccess(`${newFlyers.length} flyer(s) uploaded successfully!`);
-        }
+        const successMsg = fileArray.length > remaining
+          ? `Uploaded ${newFlyers.length} flyer(s). (Business flyers limit is 5)`
+          : `${newFlyers.length} flyer(s) uploaded successfully!`;
+        setSuccess(successMsg);
+        toast.success(successMsg);
         setTimeout(() => setSuccess(null), 2500);
         return;
       }
@@ -294,9 +319,12 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
         setCardBack(uploadedUrl);
       }
       setSuccess('Image uploaded successfully!');
+      toast.success('Image uploaded successfully!');
       setTimeout(() => setSuccess(null), 2000);
     } catch (err: any) {
-      setError(err.response?.data?.message || `Failed to upload image for ${field}.`);
+      const msg = err.response?.data?.message || err.response?.data?.error?.message || `Failed to upload image for ${field}.`;
+      setError(msg);
+      toast.error(msg, 'Upload Failed');
     } finally {
       setUploadingField(null);
     }
@@ -521,6 +549,9 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                         </button>
                       )}
                     </div>
+                    <p className="text-[10px] text-slate-500">
+                      Supported: <strong className="text-slate-700">All image formats (JPG, PNG, WEBP, AVIF, HEIC)</strong> • Max: <strong className="text-slate-700">10MB</strong> • 1:1 Square (400×400px)
+                    </p>
                   </div>
                 </div>
               </div>
@@ -561,7 +592,7 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                         <span>{uploadingField === 'business_logo' ? 'Uploading…' : 'Upload File'}</span>
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/*, .jpg, .jpeg, .png, .webp, .gif, .svg, .avif, .bmp, .heic, .heif"
                           disabled={uploadingField !== null}
                           onChange={(e) => {
                             const f = e.target.files?.[0];
@@ -581,6 +612,9 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                         </button>
                       )}
                     </div>
+                    <p className="text-[10px] text-slate-500">
+                      Supported: <strong className="text-slate-700">All image formats (JPG, PNG, WEBP, SVG)</strong> • Max: <strong className="text-slate-700">10MB</strong> • Square or Transparent
+                    </p>
                   </div>
                 </div>
               </div>
@@ -654,7 +688,7 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                       <span>File</span>
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*, .jpg, .jpeg, .png, .webp, .gif, .svg, .avif, .bmp, .heic, .heif"
                         disabled={uploadingField !== null}
                         onChange={(e) => {
                           const f = e.target.files?.[0];
@@ -714,7 +748,7 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                       <span>File</span>
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*, .jpg, .jpeg, .png, .webp, .gif, .svg, .avif, .bmp, .heic, .heif"
                         disabled={uploadingField !== null}
                         onChange={(e) => {
                           const f = e.target.files?.[0];
@@ -737,6 +771,9 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                   </div>
                 </div>
               </div>
+              <p className="text-[11px] text-slate-500 pt-2 border-t border-slate-200/80">
+                Supported: <strong className="text-slate-700">All image formats (JPG, PNG, WEBP, HEIC)</strong> • Min resolution: <strong className="text-slate-700">600×400px</strong> • Max size: <strong className="text-slate-700">10MB</strong> • Aspect ratio: <strong className="text-slate-700">7:4</strong>
+              </p>
             </div>
 
             {/* Product & Business Showcase Images (Up to 5) */}
@@ -805,7 +842,7 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                       <span>{uploadingField === 'showcase' ? 'Uploading...' : 'Upload Files (Multi-select)'}</span>
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*, .jpg, .jpeg, .png, .webp, .gif, .svg, .avif, .bmp, .heic, .heif"
                         multiple
                         disabled={uploadingField !== null}
                         onChange={(e) => {
@@ -820,6 +857,9 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                   </div>
                 </div>
               )}
+              <p className="text-[11px] text-slate-500 pt-1">
+                Supported: <strong className="text-slate-700">All image formats (JPG, PNG, WEBP, HEIC)</strong> • Max size: <strong className="text-slate-700">10MB each</strong> • Limit: <strong className="text-slate-700">Up to 5 images</strong>
+              </p>
             </div>
 
             {/* Business Flyers Management */}
@@ -904,7 +944,7 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                       <span>{uploadingField === 'flyer' ? 'Uploading...' : 'Upload Flyers (Multi-select)'}</span>
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/*, .jpg, .jpeg, .png, .webp, .gif, .svg, .avif, .bmp, .heic, .heif"
                         multiple
                         disabled={uploadingField !== null}
                         onChange={(e) => {
@@ -923,6 +963,9 @@ export const MemberEditModal: React.FC<MemberEditModalProps> = ({
                   Maximum limit of 5 business flyers reached. Remove an existing flyer to add a new one.
                 </p>
               )}
+              <p className="text-[11px] text-slate-500 pt-1">
+                Supported: <strong className="text-slate-700">All image formats (JPG, PNG, WEBP, HEIC, AVIF)</strong> • Max size: <strong className="text-slate-700">10MB each</strong> • Limit: <strong className="text-slate-700">5 flyers</strong> • Recommended: <strong className="text-slate-700">3:4 or 9:16 portrait</strong>
+              </p>
             </div>
           </section>
 

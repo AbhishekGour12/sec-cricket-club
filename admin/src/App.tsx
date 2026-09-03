@@ -9,7 +9,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Guidance } from './pages/Guidance';
 import { ResetPassword } from './pages/ResetPassword';
 import { adminApi, clearAdminSession } from './lib/api';
-
+import { ToastProvider } from './components/Toast';
 
 export const App: React.FC = () => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('admin_jwt'));
@@ -72,33 +72,35 @@ export const App: React.FC = () => {
     token ? <>{node}</> : <Navigate to="/login" replace />;
 
   return (
-    <Router>
-      <Routes>
-        <Route
-          path="/login"
-          element={
-            token ? (
-              <Navigate to="/" replace />
-            ) : (
-              <Login
-                onLoginSuccess={(newToken) => {
-                  handleLoginSuccess(newToken);
-                }}
-              />
-            )
-          }
-        />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/members" element={requireAuth(<Members />)} />
+    <ToastProvider>
+      <Router>
+        <Routes>
+          <Route
+            path="/login"
+            element={
+              token ? (
+                <Navigate to="/" replace />
+              ) : (
+                <Login
+                  onLoginSuccess={(newToken) => {
+                    handleLoginSuccess(newToken);
+                  }}
+                />
+              )
+            }
+          />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/members" element={requireAuth(<Members />)} />
 
-        <Route path="/notifications" element={requireAuth(<Notifications />)} />
-        <Route path="/announcements" element={requireAuth(<Announcements />)} />
-        <Route path="/events" element={requireAuth(<Events />)} />
-        <Route path="/guidance" element={requireAuth(<Guidance />)} />
-        <Route path="/" element={requireAuth(<Dashboard />)} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+          <Route path="/notifications" element={requireAuth(<Notifications />)} />
+          <Route path="/announcements" element={requireAuth(<Announcements />)} />
+          <Route path="/events" element={requireAuth(<Events />)} />
+          <Route path="/guidance" element={requireAuth(<Guidance />)} />
+          <Route path="/" element={requireAuth(<Dashboard />)} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Router>
+    </ToastProvider>
   );
 };
 

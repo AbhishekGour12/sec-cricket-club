@@ -158,6 +158,7 @@ function buildPayload(body: any, { partial = false } = {}) {
 async function compressImageFile(filePath: string, maxWidth: number) {
   try {
     const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.svg') return;
     const tmp = `${filePath}.tmp`;
     let pipeline = sharp(filePath).rotate().resize({
       width: maxWidth,

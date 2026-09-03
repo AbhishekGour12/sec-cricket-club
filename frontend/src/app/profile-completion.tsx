@@ -266,7 +266,12 @@ export default function ProfileCompletionScreen() {
     }
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      const pickedUri = result.assets[0].uri;
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
+        toast.showError('File Too Large', 'Selected image exceeds 10MB limit. Please choose an image under 10MB.');
+        return;
+      }
+      const pickedUri = asset.uri;
 
       if (type === 'profile-image') {
         const uploadRes = await handleUploadImage(pickedUri, 'profile-image');
@@ -469,6 +474,9 @@ export default function ProfileCompletionScreen() {
               ) : (
                 <Text style={styles.tapPhotoText}>TAP TO UPDATE PHOTO</Text>
               )}
+              <Text style={styles.criteriaHint}>
+                Supported: All image formats • Max: 10MB • 1:1 Square recommended
+              </Text>
             </View>
 
             {/* Inputs */}
@@ -662,6 +670,9 @@ export default function ProfileCompletionScreen() {
                   <Text style={styles.logoChangeText}>Tap to change logo</Text>
                 </Pressable>
               )}
+              <Text style={styles.criteriaHintSmall}>
+                Supported: All image formats (JPG, PNG, WEBP, SVG) • Max size: 10MB
+              </Text>
               {isUploading === 'business-logo' && <ActivityIndicator size="small" color={Colors.secondary} />}
             </View>
 
@@ -717,6 +728,9 @@ export default function ProfileCompletionScreen() {
                   </Pressable>
                 )}
               </ScrollView>
+              <Text style={styles.criteriaHintSmall}>
+                Supported: All image formats (JPG, PNG, WEBP, HEIC) • Max size: 10MB each • Up to 5 photos
+              </Text>
               {isUploading === 'business-images' && <ActivityIndicator size="small" color={Colors.secondary} style={styles.loaderMargin} />}
             </View>
 
@@ -1463,5 +1477,20 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: Colors.text.primary,
     fontSize: 15,
+  },
+  criteriaHint: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.text.outline,
+    marginTop: Spacing.xs,
+    textAlign: 'center',
+    lineHeight: 15,
+  },
+  criteriaHintSmall: {
+    ...Typography.caption,
+    fontSize: 10,
+    color: Colors.text.outline,
+    marginTop: 4,
+    lineHeight: 14,
   },
 });

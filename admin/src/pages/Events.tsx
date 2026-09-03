@@ -25,6 +25,7 @@ import {
 import { AdminLayout } from '../layouts/AdminLayout';
 import { getAdminMediaUrl } from '../utils/mediaUrl';
 import { getApiUrl } from '../lib/api';
+import { useToast } from '../components/Toast';
 
 const EVENT_TYPES = [
   'League Match',
@@ -197,6 +198,7 @@ export const Events: React.FC = () => {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ClubEvent | null>(null);
 
+  const toast = useToast();
   const apiURL = getApiUrl();
   const token = localStorage.getItem('admin_jwt');
   const limit = 10;
@@ -368,17 +370,32 @@ export const Events: React.FC = () => {
     e.preventDefault();
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setError('Event banner must be an image file.');
+
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|svg|avif|bmp|heic|heif|ico)$/i.test(file.name);
+    if (!isImage) {
+      const msg = 'Event banner must be a valid image file (JPG, PNG, WEBP, GIF, SVG, AVIF, BMP, HEIC).';
+      setError(msg);
+      toast.error(msg, 'Invalid Image Format');
       return;
     }
+
+    if (file.size > 10 * 1024 * 1024) {
+      const msg = 'Event banner size exceeds 10MB limit. Maximum allowed size is 10MB.';
+      setError(msg);
+      toast.error(msg, 'File Too Large');
+      return;
+    }
+
     setImageUploading(true);
     setError(null);
     try {
       const url = await uploadEventImage(file);
       setForm((prev) => ({ ...prev, event_image: url }));
+      toast.success('Event banner uploaded successfully!');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to upload event image.');
+      const msg = err.response?.data?.message || err.response?.data?.error?.message || 'Failed to upload event image.';
+      setError(msg);
+      toast.error(msg, 'Upload Failed');
     } finally {
       setImageUploading(false);
       e.target.value = '';
@@ -388,17 +405,32 @@ export const Events: React.FC = () => {
   const handleSponsorLogoUpload = async (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setError('Sponsor logo must be an image file.');
+
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|svg|avif|bmp|heic|heif|ico)$/i.test(file.name);
+    if (!isImage) {
+      const msg = 'Sponsor logo must be an image file (JPG, PNG, WEBP, SVG, GIF, AVIF).';
+      setError(msg);
+      toast.error(msg, 'Invalid Image Format');
       return;
     }
+
+    if (file.size > 5 * 1024 * 1024) {
+      const msg = 'Sponsor logo size exceeds 5MB limit. Maximum allowed size is 5MB.';
+      setError(msg);
+      toast.error(msg, 'File Too Large');
+      return;
+    }
+
     setSponsorUploadingIndex(idx);
     setError(null);
     try {
       const url = await uploadEventImage(file);
       updateSponsor(idx, { logo: url });
+      toast.success('Sponsor logo uploaded successfully!');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to upload sponsor logo.');
+      const msg = err.response?.data?.message || err.response?.data?.error?.message || 'Failed to upload sponsor logo.';
+      setError(msg);
+      toast.error(msg, 'Upload Failed');
     } finally {
       setSponsorUploadingIndex(null);
       e.target.value = '';
@@ -1115,13 +1147,20 @@ export const Events: React.FC = () => {
                         <input
                           ref={imageInputRef}
                           type="file"
-                          accept="image/*"
+                          accept="image/*, .jpg, .jpeg, .png, .webp, .gif, .svg, .avif, .bmp, .heic, .heif"
                           onChange={handleImageUpload}
                           className="hidden"
                           disabled={imageUploading}
                         />
                       </label>
                     </div>
+                    <p className="text-[11px] text-slate-500 mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span>Supported: <strong className="text-slate-700">All image formats (JPG, PNG, WEBP, GIF, SVG, AVIF, HEIC)</strong></span>
+                      <span>•</span>
+                      <span>Max size: <strong className="text-slate-700">10MB</strong></span>
+                      <span>•</span>
+                      <span>Recommended: <strong className="text-slate-700">16:9 ratio (1200×675px)</strong></span>
+                    </p>
                   </div>
 
                   {/* Feature on homepage switch */}
@@ -1173,7 +1212,7 @@ export const Events: React.FC = () => {
                           <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
-                      <div className="space-y-1">
+                      <div className="space-y-1 sm:col-span-2">
                         <div className="flex items-center gap-1.5">
                           <input
                             type="text"
@@ -1194,13 +1233,16 @@ export const Events: React.FC = () => {
                             <span className="hidden sm:inline">{sponsorUploadingIndex === idx ? 'Uploading…' : 'File'}</span>
                             <input
                               type="file"
-                              accept="image/*"
+                              accept="image/*, .jpg, .jpeg, .png, .webp, .gif, .svg, .avif, .bmp, .heic, .heif"
                               disabled={sponsorUploadingIndex !== null}
                               onChange={(e) => handleSponsorLogoUpload(idx, e)}
                               className="hidden"
                             />
                           </label>
                         </div>
+                        <p className="text-[10px] text-slate-500">
+                          Supported: <strong className="text-slate-700">All image formats (JPG, PNG, WEBP, SVG)</strong> • Max size: <strong className="text-slate-700">5MB</strong>
+                        </p>
                         {s.logo && (
                           <div className="flex items-center gap-2 px-1">
                             <img

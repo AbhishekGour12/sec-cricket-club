@@ -163,6 +163,10 @@ const BusinessCardUpload: React.FC<BusinessCardUploadProps> = ({
         />
       </View>
 
+      <Text style={styles.criteriaHint}>
+        Supported: All image formats (JPG, PNG, WEBP, HEIC) • Min resolution: 600×400px • Max: 10MB
+      </Text>
+
       {/* Error message */}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -447,6 +451,12 @@ const styles = StyleSheet.create({
     color: Colors.text.outline,
     marginBottom: Spacing.md,
     lineHeight: 16,
+  },
+  criteriaHint: {
+    fontSize: 11,
+    color: Colors.text.outline,
+    marginTop: Spacing.xs,
+    lineHeight: 15,
   },
 
   cardSlotsStack: {

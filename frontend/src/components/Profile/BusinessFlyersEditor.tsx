@@ -26,7 +26,7 @@ import { getMediaUrl } from '../../utils/mediaUrl';
 import { ImageViewer } from './ImageViewer';
 import { useToast } from '@/components/Toast';
 
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_BYTES = 10 * 1024 * 1024;
 
 interface BusinessFlyersEditorProps {
   /** When false, shows a read-only gallery grid (owner view mode). */
@@ -98,16 +98,17 @@ export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorPr
 
     const asset = result.assets[0];
     if (asset.fileSize && asset.fileSize > MAX_BYTES) {
-      toast.showError('File Too Large', 'Each image must be 5 MB or smaller.');
+      toast.showError('File Too Large', 'Flyer image size exceeds 10 MB limit. Allowed size: up to 10 MB.');
       return;
     }
 
     const mime = (asset.mimeType || '').toLowerCase();
     if (
       mime &&
-      !['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(mime)
+      !mime.startsWith('image/') &&
+      !['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif', 'image/gif', 'image/svg+xml'].includes(mime)
     ) {
-      toast.showError('Unsupported Format', 'Only JPG, JPEG, PNG, and WEBP images are allowed.');
+      toast.showError('Unsupported Format', 'Please upload a valid image file (JPG, PNG, WEBP, HEIC, AVIF, etc.).');
       return;
     }
 
@@ -312,6 +313,12 @@ export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorPr
         </View>
       )}
 
+      {editable && (
+        <Text style={styles.criteriaHint}>
+          Supported: All image formats (JPG, PNG, WEBP, HEIC, AVIF) • Max size: 10MB each • Up to {max} flyers
+        </Text>
+      )}
+
       <ImageViewer
         visible={viewerIndex !== null}
         images={imageUrls}
@@ -325,6 +332,13 @@ export function BusinessFlyersEditor({ editable = true }: BusinessFlyersEditorPr
 const styles = StyleSheet.create({
   section: {
     marginBottom: Spacing.lg,
+  },
+  criteriaHint: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.text.outline,
+    marginTop: Spacing.xs,
+    lineHeight: 15,
   },
   headerRow: {
     flexDirection: 'row',
