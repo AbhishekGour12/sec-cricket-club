@@ -28,6 +28,7 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "versionCode": 26,
       "predictiveBackGestureEnabled": false,
       "package": "com.seccricketclub.app",
       "googleServicesFile": "./google-services.json",
