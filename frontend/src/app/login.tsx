@@ -22,6 +22,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LogoBadge } from '@/components/SecLogo';
 import { DotPatternBackground } from '@/components/DotPatternBackground';
 import { warmApiConnection } from '@/services/apiHealth';
+import { useToast } from '@/components/Toast';
 
 // Web (type 3) client is required for idToken; iOS client matches GoogleService-Info.plist.
 const WEB_CLIENT_ID =
@@ -109,10 +110,81 @@ async function authenticateWithBackend(
   }
 }
 
+function formatAuthError(err: unknown): { title: string; message: string; isCancelled: boolean } {
+  const raw = err instanceof Error ? err.message : String(err || '');
+  const code = (err as { code?: string | number })?.code;
+  const lower = raw.toLowerCase();
+
+  // 1. User intentionally cancelled
+  if (
+    raw.includes('SIGN_IN_CANCELLED') ||
+    code === 'SIGN_IN_CANCELLED' ||
+    code === 'ERR_REQUEST_CANCELED' ||
+    lower.includes('cancel')
+  ) {
+    return { title: 'Sign-In Cancelled', message: 'Sign-in was cancelled.', isCancelled: true };
+  }
+
+  // 2. Play Services / Google Sign-in signature or developer configuration error
+  if (
+    lower.includes('developer_error') ||
+    code === 10 ||
+    code === '10' ||
+    code === 'DEVELOPER_ERROR'
+  ) {
+    return {
+      title: 'Google Sign-In Error',
+      message: 'Google Sign-In service is syncing. Please try again shortly.',
+      isCancelled: false,
+    };
+  }
+
+  // 3. Network or timeout errors
+  if (lower.includes('network error') || lower.includes('timeout') || lower.includes('econnrefused')) {
+    return {
+      title: 'Connection Error',
+      message: 'Unable to connect to server. Please check your internet connection.',
+      isCancelled: false,
+    };
+  }
+
+  // 4. Firebase Authentication specific errors
+  if (lower.includes('firebase') || raw.includes('auth/')) {
+    if (raw.includes('auth/user-disabled')) {
+      return { title: 'Account Disabled', message: 'This account has been disabled. Please contact support.', isCancelled: false };
+    }
+    if (raw.includes('auth/invalid-credential') || raw.includes('auth/invalid-token')) {
+      return { title: 'Authentication Failed', message: 'Invalid credentials. Please try signing in again.', isCancelled: false };
+    }
+    return {
+      title: 'Authentication Error',
+      message: 'Unable to authenticate with Firebase. Please try again.',
+      isCancelled: false,
+    };
+  }
+
+  // 5. Backend response error
+  const apiError = (err as { response?: { data?: { message?: string; error?: string } } })?.response?.data;
+  if (apiError?.message || apiError?.error) {
+    return {
+      title: 'Login Failed',
+      message: apiError.message || apiError.error || 'Failed to login with account.',
+      isCancelled: false,
+    };
+  }
+
+  return {
+    title: 'Login Failed',
+    message: raw && !raw.includes('http') && !raw.includes('github') ? raw : 'Failed to authenticate. Please try again.',
+    isCancelled: false,
+  };
+}
+
 const SUCCESS_VISIBLE_MS = 0;
 
 export default function LoginScreen() {
   const router = useRouter();
+  const toast = useToast();
   const { login, error } = useAuth();
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -168,13 +240,13 @@ export default function LoginScreen() {
 
       await finishLogin(userRes);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to authenticate with Google.';
       console.error('Google Auth Login failed:', err);
-
-      if (message.includes('SIGN_IN_CANCELLED') || message.includes('developer_error')) {
-        setLoginError('Login was cancelled or misconfigured.');
+      const formatted = formatAuthError(err);
+      if (!formatted.isCancelled) {
+        toast.showError(formatted.title, formatted.message);
+        setLoginError(formatted.message);
       } else {
-        setLoginError(message || 'Failed to authenticate with Google. Please try again.');
+        setLoginError(null);
       }
       setIsSigningIn(false);
       setLoginSuccess(null);
@@ -214,12 +286,13 @@ export default function LoginScreen() {
 
       await finishLogin(userRes);
     } catch (err: unknown) {
-      if ((err as { code?: string })?.code === 'ERR_REQUEST_CANCELED') {
-        setLoginError('Apple Sign-In was cancelled.');
+      console.error('Apple Auth Login failed:', err);
+      const formatted = formatAuthError(err);
+      if (!formatted.isCancelled) {
+        toast.showError(formatted.title, formatted.message);
+        setLoginError(formatted.message);
       } else {
-        const message = err instanceof Error ? err.message : 'Failed to authenticate with Apple.';
-        console.error('Apple Auth Login failed:', err);
-        setLoginError(message || 'Failed to authenticate with Apple. Please try again.');
+        setLoginError(null);
       }
       setIsSigningIn(false);
       setLoginSuccess(null);

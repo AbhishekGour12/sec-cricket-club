@@ -22,6 +22,30 @@
           }
         },
         {
+          "client_id": "837780082237-5m2tu8ki10gvv7magrihcjei481ugm6s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.seccricketclub.app",
+            "certificate_hash": "dd8e6eb595127b40880cbfbb2f6df259251531ab"
+          }
+        },
+        {
+          "client_id": "837780082237-9u55fgvb34kn0aaij1pbl346jc699osm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.seccricketclub.app",
+            "certificate_hash": "d88c89e56eaecd8276a1b535b7501ce4e222c0a6"
+          }
+        },
+        {
+          "client_id": "837780082237-p872nnis6lm7egejnn5spn57h3krv9qu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.seccricketclub.app",
+            "certificate_hash": "078c67951ee171f2ed3f209ca06a21fecdfe11e6"
+          }
+        },
+        {
           "client_id": "837780082237-n5fr5566aibc80v5ula2ssljqivuf98t.apps.googleusercontent.com",
           "client_type": 3
         }
