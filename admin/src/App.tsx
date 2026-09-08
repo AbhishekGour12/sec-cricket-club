@@ -5,6 +5,7 @@ import { Members } from './pages/Members';
 import { Notifications } from './pages/Notifications';
 import { Announcements } from './pages/Announcements';
 import { Events } from './pages/Events';
+import { Suggestions } from './pages/Suggestions';
 import { Dashboard } from './pages/Dashboard';
 import { Guidance } from './pages/Guidance';
 import { ResetPassword } from './pages/ResetPassword';
@@ -95,6 +96,7 @@ export const App: React.FC = () => {
           <Route path="/notifications" element={requireAuth(<Notifications />)} />
           <Route path="/announcements" element={requireAuth(<Announcements />)} />
           <Route path="/events" element={requireAuth(<Events />)} />
+          <Route path="/suggestions" element={requireAuth(<Suggestions />)} />
           <Route path="/guidance" element={requireAuth(<Guidance />)} />
           <Route path="/" element={requireAuth(<Dashboard />)} />
           <Route path="*" element={<Navigate to="/" replace />} />

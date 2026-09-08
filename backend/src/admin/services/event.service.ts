@@ -23,6 +23,10 @@ export class EventService {
     return EventRepository.listFeatured(limit);
   }
 
+  public static async listEventSponsors() {
+    return EventRepository.listEventSponsors();
+  }
+
   public static async getById(id: number) {
     return EventRepository.findById(id);
   }

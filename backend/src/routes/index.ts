@@ -18,6 +18,7 @@ import { MemberImportController } from '../admin/controllers/member-import.contr
 import { NotificationController } from '../admin/controllers/notification.controller';
 import AnnouncementController from '../admin/controllers/announcement.controller';
 import DashboardController from '../admin/controllers/dashboard.controller';
+import SuggestionController from '../admin/controllers/suggestion.controller';
 
 const router = Router();
 
@@ -165,6 +166,17 @@ router.delete('/admin/announcements/:id', verifyAdminJwt as any, AnnouncementCon
 router.patch('/admin/announcements/:id/publish', verifyAdminJwt as any, AnnouncementController.adminPublish);
 router.patch('/admin/announcements/:id/unpublish', verifyAdminJwt as any, AnnouncementController.adminUnpublish);
 
+// Admin Suggestions & Feedback
+router.get('/admin/suggestions/stats', verifyAdminJwt as any, SuggestionController.adminStats);
+router.get('/admin/suggestions', verifyAdminJwt as any, SuggestionController.adminList);
+router.patch('/admin/suggestions/:id/status', verifyAdminJwt as any, SuggestionController.adminUpdate);
+router.put('/admin/suggestions/:id', verifyAdminJwt as any, SuggestionController.adminUpdate);
+router.delete('/admin/suggestions/:id', verifyAdminJwt as any, SuggestionController.adminDelete);
+
+// Mobile Suggestions (User feedback & complaints)
+router.post('/suggestions', verifyJwt as any, SuggestionController.create);
+router.get('/me/suggestions', verifyJwt as any, SuggestionController.getMySuggestions);
+
 // Mobile Announcements (approved members only — enforced in controller via JWT + published filter)
 router.get('/mobile/announcements/sync', verifyJwt as any, AnnouncementController.mobileSync);
 router.get('/mobile/announcements', verifyJwt as any, AnnouncementController.mobileList);
@@ -197,10 +209,12 @@ router.patch('/admin/events/:id/status', verifyAdminJwt as any, EventController.
 // Mobile Events (approved members only — enforced in controller)
 router.get('/events/sync', verifyJwt as any, EventController.mobileSync);
 router.get('/events/featured', verifyJwt as any, EventController.mobileFeatured);
+router.get('/events/sponsors', verifyJwt as any, EventController.mobileSponsors);
 router.get('/events', verifyJwt as any, EventController.mobileList);
 router.get('/events/:id', verifyJwt as any, EventController.mobileGetById);
 router.get('/mobile/events/sync', verifyJwt as any, EventController.mobileSync);
 router.get('/mobile/events/featured', verifyJwt as any, EventController.mobileFeatured);
+router.get('/mobile/events/sponsors', verifyJwt as any, EventController.mobileSponsors);
 router.get('/mobile/events', verifyJwt as any, EventController.mobileList);
 router.get('/mobile/events/:id', verifyJwt as any, EventController.mobileGetById);
 

@@ -13,6 +13,7 @@ import { AnnouncementRead } from './admin/models/AnnouncementRead';
 import { Event } from './admin/models/Event';
 import { Sponsor } from './admin/models/Sponsor';
 import { EventSponsor } from './admin/models/EventSponsor';
+import { Suggestion } from './admin/models/Suggestion';
 import bcrypt from 'bcryptjs';
 
 // Associations
@@ -26,6 +27,9 @@ Announcement.hasMany(AnnouncementRead, {
 AnnouncementRead.belongsTo(Announcement, { foreignKey: 'announcement_id', as: 'announcement' });
 User.hasMany(AnnouncementRead, { foreignKey: 'user_id', as: 'announcement_reads', onDelete: 'CASCADE' });
 AnnouncementRead.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+User.hasMany(Suggestion, { foreignKey: 'user_id', as: 'suggestions', onDelete: 'SET NULL' });
+Suggestion.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 Event.hasMany(EventSponsor, { foreignKey: 'event_id', as: 'event_sponsors', onDelete: 'CASCADE' });
 EventSponsor.belongsTo(Event, { foreignKey: 'event_id', as: 'event' });

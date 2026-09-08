@@ -273,6 +273,23 @@ export class EventRepository {
       })),
     };
   }
+
+  public static async listEventSponsors() {
+    // Find all published events (both upcoming and recent) that have sponsors
+    const events = await Event.findAll({
+      where: {
+        status: 'Published',
+      },
+      include: [sponsorInclude],
+      order: [
+        ['event_date', 'ASC'],
+        ['start_time', 'ASC'],
+      ],
+    });
+
+    return events;
+  }
 }
 
 export default EventRepository;
+

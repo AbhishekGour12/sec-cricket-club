@@ -1,5 +1,5 @@
-import React, { useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import React, { useEffect, useCallback, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -23,6 +23,8 @@ import { useFeaturedEventsQuery, useEventsQuery } from '../../hooks/useEvents';
 import { useEventStore } from '../../store/eventStore';
 import { FeaturedEventsCarousel } from '@/components/Events/FeaturedEventsCarousel';
 import { UpcomingEventsPreview } from '@/components/Events/UpcomingEventsPreview';
+import { EventSponsorsRibbon } from '@/components/Events/EventSponsorsRibbon';
+import { SuggestionBoxCard } from '@/components/Suggestions/SuggestionBoxCard';
 import { refreshPublishedContent } from '../../utils/refreshContent';
 import { useToast } from '@/components/Toast';
 import { useNotificationInboxStore } from '../../store/notificationInboxStore';
@@ -78,10 +80,30 @@ export default function HomeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refreshPublishedContent(queryClient),
+        queryClient.invalidateQueries({ queryKey: ['events', 'sponsors'] }),
+        queryClient.invalidateQueries({ queryKey: ['events'] }),
+        queryClient.invalidateQueries({ queryKey: ['announcements'] }),
+        fetchApprovalStatus(),
+      ]);
+    } catch {
+      // ignore
+    } finally {
+      setRefreshing(false);
+    }
+  }, [queryClient, fetchApprovalStatus]);
+
   useFocusEffect(
     useCallback(() => {
       if (!isApproved) return;
       void refreshPublishedContent(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['events', 'sponsors'] });
     }, [isApproved, queryClient]),
   );
 
@@ -264,7 +286,18 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[Colors.primary]}
+            tintColor={Colors.primary}
+          />
+        }
+      >
         {/* Header Greeting */}
         <View style={styles.header}>
           <View>
@@ -348,6 +381,7 @@ export default function HomeScreen() {
               isLoading={featuredLoading}
               onPressEvent={openEvent}
             />
+            <EventSponsorsRibbon events={featuredEvents} />
             <UpcomingEventsPreview
               events={upcomingPreview}
               isLoading={upcomingLoading}
@@ -383,6 +417,10 @@ export default function HomeScreen() {
             <Text style={styles.quickNavSubtitle}>Club members</Text>
           </Pressable>
         </View>
+
+        {/* Member Suggestions & Feedback Box */}
+        <SectionHeader title="Member Suggestions & Feedback" />
+        <SuggestionBoxCard />
 
         {/* Latest News Announcement */}
         <SectionHeader

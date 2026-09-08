@@ -482,6 +482,33 @@ export class EventController {
       res.status(500).json({ error: 'Internal Server Error', message: 'Failed to load event' });
     }
   }
+
+  public static async mobileSponsors(req: any, res: Response): Promise<void> {
+    try {
+      if (!(await assertApprovedMember(req, res))) return;
+
+      const events = await EventService.listEventSponsors();
+      const allSponsors: any[] = [];
+
+      for (const ev of events) {
+        const serialized = serializeEvent(ev);
+        for (const sp of serialized.sponsors) {
+          allSponsors.push({
+            ...sp,
+            event_id: serialized.id,
+            event_name: serialized.event_name,
+            event_date: serialized.event_date,
+            event_type: serialized.event_type,
+          });
+        }
+      }
+
+      res.status(200).json({ sponsors: allSponsors });
+    } catch (error) {
+      logger.error('[Event] mobileSponsors failed:', error);
+      res.status(500).json({ error: 'Internal Server Error', message: 'Failed to load sponsors' });
+    }
+  }
 }
 
 export default EventController;

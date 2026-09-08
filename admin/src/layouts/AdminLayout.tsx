@@ -20,7 +20,8 @@ import {
   Check,
   Clock,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  MessageSquare
 } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { getApiUrl } from '../lib/api';
@@ -95,6 +96,7 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [notifFilter, setNotifFilter] = useState<'all' | 'unread'>('all');
   const [pendingCount, setPendingCount] = useState<number>(0);
+  const [pendingSuggestionsCount, setPendingSuggestionsCount] = useState<number>(0);
 
   // Profile Flyout State
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -150,12 +152,26 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
     }
   };
 
+  const fetchSuggestionsCount = async () => {
+    if (!token) return;
+    try {
+      const response = await axios.get(`${apiURL}/admin/suggestions/stats`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPendingSuggestionsCount(response.data.pending || 0);
+    } catch {
+      // Ignore background fetch failure
+    }
+  };
+
   useEffect(() => {
     fetchNotifications();
     fetchPendingCount();
+    fetchSuggestionsCount();
     const interval = setInterval(() => {
       fetchNotifications();
       fetchPendingCount();
+      fetchSuggestionsCount();
     }, 20000);
     return () => clearInterval(interval);
   }, [token]);
@@ -178,11 +194,11 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
 
   // Close dropdowns on outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setIsProfileMenuOpen(false);
       }
-      if (notifMenuRef.current && !notifMenuRef.current.contains(e.target as Node)) {
+      if (notifMenuRef.current && !notifMenuRef.current.contains(event.target as Node)) {
         setIsNotifOpen(false);
       }
     };
@@ -190,7 +206,12 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const handleLogout = () => {
+    localStorage.removeItem('admin_jwt');
+    localStorage.removeItem('admin_user');
+    window.dispatchEvent(new Event('admin-auth-changed'));
+    navigate('/login');
+  };
 
   const handleMarkAsRead = async (id: number) => {
     try {
@@ -215,20 +236,17 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('admin_jwt');
-    localStorage.removeItem('admin_user');
-    window.dispatchEvent(new Event('admin-auth-changed'));
-    window.location.href = '/login';
-  };
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const currentPath = location.pathname;
 
   const openEditProfile = () => {
     setEditName(user?.full_name || '');
     setEditImage(user?.profile_image || '');
     setModalError(null);
     setModalSuccess(null);
-    setIsProfileMenuOpen(false);
     setIsEditProfileOpen(true);
+    setIsProfileMenuOpen(false);
   };
 
   const openChangePassword = () => {
@@ -237,30 +255,35 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
     setConfirmPassword('');
     setModalError(null);
     setModalSuccess(null);
-    setIsProfileMenuOpen(false);
     setIsChangePasswordOpen(true);
+    setIsProfileMenuOpen(false);
   };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setModalLoading(true);
-    setModalError(null);
-    setModalSuccess(null);
-
+    if (!editName.trim()) {
+      setModalError('Full name is required.');
+      return;
+    }
     try {
-      const response = await axios.put(
-        `${apiURL}/admin/auth/profile`,
-        { full_name: editName, profile_image: editImage },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      const updatedUser = response.data.user || { ...user, full_name: editName, profile_image: editImage };
+      setModalLoading(true);
+      setModalError(null);
+      const res = await axios.put(`${apiURL}/admin/auth/profile`, {
+        full_name: editName.trim(),
+        profile_image: editImage.trim() || null
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const updatedUser = res.data.user;
       localStorage.setItem('admin_user', JSON.stringify(updatedUser));
       setUser(updatedUser);
       setModalSuccess('Profile updated successfully!');
-      setTimeout(() => setIsEditProfileOpen(false), 1200);
+      setTimeout(() => {
+        setIsEditProfileOpen(false);
+        setModalSuccess(null);
+      }, 1200);
     } catch (err: any) {
-      setModalError(err?.response?.data?.message || 'Failed to update profile.');
+      setModalError(err.response?.data?.message || 'Failed to update profile.');
     } finally {
       setModalLoading(false);
     }
@@ -268,30 +291,34 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword !== confirmPassword) {
-      setModalError('New passwords do not match.');
+    if (!currentPassword) {
+      setModalError('Current password is required.');
       return;
     }
     if (newPassword.length < 6) {
       setModalError('New password must be at least 6 characters.');
       return;
     }
-
-    setModalLoading(true);
-    setModalError(null);
-    setModalSuccess(null);
-
+    if (newPassword !== confirmPassword) {
+      setModalError('New passwords do not match.');
+      return;
+    }
     try {
-      await axios.put(
-        `${apiURL}/admin/auth/change-password`,
-        { current_password: currentPassword, new_password: newPassword },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      setModalSuccess('Password changed successfully!');
-      setTimeout(() => setIsChangePasswordOpen(false), 1200);
+      setModalLoading(true);
+      setModalError(null);
+      await axios.put(`${apiURL}/admin/auth/change-password`, {
+        currentPassword,
+        newPassword
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setModalSuccess('Password changed successfully! You will need to use it next time.');
+      setTimeout(() => {
+        setIsChangePasswordOpen(false);
+        setModalSuccess(null);
+      }, 1500);
     } catch (err: any) {
-      setModalError(err?.response?.data?.message || 'Failed to change password. Verify your current password.');
+      setModalError(err.response?.data?.message || 'Failed to change password.');
     } finally {
       setModalLoading(false);
     }
@@ -306,8 +333,6 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
     .join('')
     .substring(0, 2)
     .toUpperCase() || 'AD';
-
-  const currentPath = location.pathname;
 
   const downloadTemplate = () => {
     const headers = [
@@ -351,6 +376,7 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
     { icon: <Bell size={20} />, label: 'Notifications', path: '/notifications', badge: unreadCount > 0 ? unreadCount : null },
     { icon: <Calendar size={20} />, label: 'Events', path: '/events' },
     { icon: <Megaphone size={20} />, label: 'Announcements', path: '/announcements' },
+    { icon: <MessageSquare size={20} />, label: 'Suggestions', path: '/suggestions', badge: pendingSuggestionsCount > 0 ? pendingSuggestionsCount : null },
     { icon: <CircleHelp size={20} />, label: 'Guidance & Help', path: '/guidance' },
   ];
 
@@ -373,6 +399,7 @@ export const AdminLayout: React.FC<{ children?: React.ReactNode }> = ({ children
     { title: 'Change Password', desc: 'Update admin security password & credentials', path: '/?action=change-password', icon: <KeyRound size={18} />, action: openChangePassword },
     { title: 'Events & Matches', desc: 'Create and publish club tournaments', path: '/events', icon: <Calendar size={18} /> },
     { title: 'Announcements', desc: 'Broadcast notices and club updates', path: '/announcements', icon: <Megaphone size={18} /> },
+    { title: 'Member Suggestions & Complaints', desc: `Review feedback, complaints & suggestions (${pendingSuggestionsCount} pending)`, path: '/suggestions', icon: <MessageSquare size={18} /> },
     { title: 'System Notifications', desc: 'View complete notification history', path: '/notifications', icon: <Bell size={18} /> },
     { title: 'Help & Operational Guide', desc: 'Media specs, CSV format & guidelines', path: '/guidance', icon: <CircleHelp size={18} /> },
   ];
