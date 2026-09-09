@@ -203,7 +203,7 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
         </View>
       </View>
 
-      {/* Compact Sponsor Banner Item */}
+      {/* Centered Sponsor Banner Item */}
       <Animated.View
         style={[
           styles.cardAnimatedWrap,
@@ -213,7 +213,7 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
         <Pressable
           style={({ pressed }) => [
             styles.card,
-            { borderLeftColor: currentSponsor.topColor },
+            { borderTopColor: currentSponsor.topColor, borderTopWidth: 3 },
             pressed && styles.cardPressed,
           ]}
           onPress={handleCardPress}
@@ -226,43 +226,43 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
             }, 2500);
           }}
         >
-          {/* Left: Compact Logo Container */}
-          <View style={styles.logoContainer}>
-            <Image
-              source={currentSponsor.logo}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
+          {/* Centered Tier Badge */}
+          <View
+            style={[
+              styles.tierBadge,
+              {
+                backgroundColor: currentSponsor.badgeBg,
+                borderColor: currentSponsor.badgeBorder,
+              },
+            ]}
+          >
+            <MaterialIcons name="star" size={10} color={currentSponsor.accentColor} />
+            <Text style={[styles.tierText, { color: currentSponsor.badgeText }]}>
+              {currentSponsor.tierLabel}
+            </Text>
           </View>
 
-          {/* Right: Partner Info & Fixture */}
-          <View style={styles.infoCol}>
-            <View style={styles.tierRow}>
-              <View
-                style={[
-                  styles.tierBadge,
-                  {
-                    backgroundColor: currentSponsor.badgeBg,
-                    borderColor: currentSponsor.badgeBorder,
-                  },
-                ]}
-              >
-                <MaterialIcons name="star" size={9} color={currentSponsor.accentColor} />
-                <Text style={[styles.tierText, { color: currentSponsor.badgeText }]}>
-                  {currentSponsor.tierLabel}
-                </Text>
-              </View>
+          {/* Centered Content: Logo & Details */}
+          <View style={styles.centerContentRow}>
+            <View style={styles.logoContainer}>
+              <Image
+                source={currentSponsor.logo}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
 
-            <Text style={styles.sponsorName} numberOfLines={1}>
-              {currentSponsor.name}
-            </Text>
-
-            <View style={styles.eventPill}>
-              <MaterialIcons name="sports-cricket" size={10} color="#64748B" />
-              <Text style={styles.eventPillText} numberOfLines={1}>
-                {currentSponsor.eventName}
+            <View style={styles.infoCol}>
+              <Text style={styles.sponsorName} numberOfLines={1}>
+                {currentSponsor.name}
               </Text>
+
+              <View style={styles.eventPill}>
+                <MaterialIcons name="sports-cricket" size={11} color="#64748B" />
+                <Text style={styles.eventPillText} numberOfLines={1}>
+                  {currentSponsor.eventName}
+                </Text>
+              </View>
             </View>
           </View>
         </Pressable>
@@ -288,28 +288,25 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 4,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    ...Shadows.sm,
+    marginVertical: 6,
+    backgroundColor: 'transparent',
+    paddingVertical: 2,
+    paddingHorizontal: 0,
   },
   headerRow: {
     marginBottom: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 4,
   },
   ribbonBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#F1F5F9',
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: Radius.round,
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -331,8 +328,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     backgroundColor: '#FEF3C7',
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: Radius.round,
     borderWidth: 1,
     borderColor: '#FDE68A',
@@ -346,25 +343,48 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   card: {
-    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: Radius.sm,
-    padding: 8,
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.lg,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderLeftWidth: 3.5,
-    gap: 10,
+    gap: 6,
+    ...Shadows.sm,
   },
   cardPressed: {
     opacity: 0.94,
     transform: [{ scale: 0.99 }],
   },
+  tierBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: Radius.round,
+    borderWidth: 1,
+  },
+  tierText: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  centerContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    width: '100%',
+  },
   logoContainer: {
-    width: 60,
+    width: 64,
     height: 44,
-    backgroundColor: '#FFFFFF',
-    borderRadius: Radius.xs,
+    backgroundColor: '#F8FAFC',
+    borderRadius: Radius.sm,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     alignItems: 'center',
@@ -378,35 +398,22 @@ const styles = StyleSheet.create({
   infoCol: {
     flex: 1,
     justifyContent: 'center',
-    gap: 2,
-  },
-  tierRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  tierBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2.5,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: Radius.round,
-    borderWidth: 1,
-  },
-  tierText: {
-    fontSize: 8.5,
-    fontWeight: '800',
-    letterSpacing: -0.1,
+    alignItems: 'flex-start',
+    gap: 3,
   },
   sponsorName: {
-    fontSize: 12.5,
+    fontSize: 13.5,
     fontWeight: '800',
     color: '#0F172A',
   },
   eventPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 3.5,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radius.round,
   },
   eventPillText: {
     fontSize: 10,

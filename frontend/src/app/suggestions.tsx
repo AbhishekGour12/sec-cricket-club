@@ -107,11 +107,21 @@ export default function SuggestionsScreen() {
       <View style={styles.topBar}>
         <Pressable
           style={styles.backBtn}
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)/home' as any);
+            }
+          }}
           hitSlop={8}
-          accessibilityLabel="Go back"
+          accessibilityLabel="Go back or Home"
         >
-          <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
+          <MaterialIcons
+            name={router.canGoBack() ? 'arrow-back' : 'home'}
+            size={24}
+            color="#FFFFFF"
+          />
         </Pressable>
 
         <View style={styles.topBarTitleCol}>

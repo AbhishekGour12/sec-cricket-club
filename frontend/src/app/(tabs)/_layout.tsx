@@ -76,6 +76,16 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="suggestions"
+          options={{
+            title: 'FEEDBACK',
+            tabBarIcon: ({ color }) => (
+              <MaterialIcons name="rate-review" color={color} size={22} />
+            ),
+            tabBarButton: isApproved ? undefined : () => null,
+          }}
+        />
+        <Tabs.Screen
           name="profile"
           options={{
             href: null,
