@@ -276,16 +276,16 @@ export default function SuggestionsScreen() {
               style={({ pressed }) => [
                 styles.submitBtn,
                 submitMutation.isPending && styles.submitBtnDisabled,
-                pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+                pressed && styles.submitBtnPressed,
               ]}
               onPress={handleSubmit}
               disabled={submitMutation.isPending}
             >
               {submitMutation.isPending ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
+                <ActivityIndicator color="#b41616ff" size="small" />
               ) : (
                 <>
-                  <MaterialIcons name="send" size={18} color="#FFFFFF" />
+
                   <Text style={styles.submitBtnText}>Submit to Committee</Text>
                 </>
               )}
@@ -607,7 +607,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   submitBtn: {
-    backgroundColor: '#DC2626',
+    backgroundColor: '#D90429',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -618,6 +618,13 @@ const styles = StyleSheet.create({
     borderColor: '#B91C1C',
     ...Shadows.md,
     marginTop: 6,
+    color: "#B91C1C"
+
+  },
+  submitBtnPressed: {
+    backgroundColor: '#B91C1C',
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
   },
   submitBtnDisabled: {
     opacity: 0.55,
@@ -625,10 +632,14 @@ const styles = StyleSheet.create({
     borderColor: '#94A3B8',
   },
   submitBtnText: {
-    color: '#FFFFFF',
+    color: 'white',
     fontSize: 16,
     fontWeight: '900',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
+    backgroundColor: '#a21212ff',
+    padding: 10,
+    borderRadius: Radius.md,
+    textAlign: 'center'
   },
   loadingBox: {
     paddingVertical: 60,

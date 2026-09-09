@@ -35,9 +35,13 @@ interface MemberUser {
   email?: string;
   phone?: string;
   profile_image?: string | null;
+  membership_number?: string;
   member_id?: string;
+  business_name?: string;
   company_name?: string;
+  business_category?: string;
   category?: string;
+  designation?: string;
 }
 
 interface SuggestionItem {
@@ -63,6 +67,7 @@ interface StatsData {
     suggestion: number;
     complaint: number;
     feedback: number;
+    general?: number;
   };
 }
 
@@ -76,7 +81,7 @@ export const Suggestions: React.FC = () => {
     reviewed: 0,
     resolved: 0,
     archived: 0,
-    byType: { suggestion: 0, complaint: 0, feedback: 0 },
+    byType: { suggestion: 0, complaint: 0, feedback: 0, general: 0 },
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isStatsLoading, setIsStatsLoading] = useState(true);
@@ -135,7 +140,8 @@ export const Suggestions: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [page, searchQuery, selectedType, selectedStatus, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchQuery, selectedType, selectedStatus]);
 
   useEffect(() => {
     fetchStats();
@@ -485,9 +491,9 @@ export const Suggestions: React.FC = () => {
                         <h4 className="font-bold text-[#1A2744] text-base">
                           {item.user?.full_name || 'Anonymous Member'}
                         </h4>
-                        {item.user?.member_id && (
+                        {(item.user?.membership_number || item.user?.member_id) && (
                           <span className="text-[11px] font-mono font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
-                            {item.user.member_id}
+                            {item.user.membership_number || item.user.member_id}
                           </span>
                         )}
                       </div>
@@ -504,10 +510,15 @@ export const Suggestions: React.FC = () => {
                             {item.user.phone}
                           </span>
                         )}
-                        {item.user?.company_name && (
+                        {(item.user?.business_name || item.user?.company_name) && (
                           <span className="inline-flex items-center gap-1">
                             <Building size={12} className="text-slate-400" />
-                            {item.user.company_name}
+                            {item.user.business_name || item.user.company_name}
+                          </span>
+                        )}
+                        {item.user?.designation && (
+                          <span className="inline-flex items-center gap-1 text-slate-400">
+                            • {item.user.designation}
                           </span>
                         )}
                       </div>

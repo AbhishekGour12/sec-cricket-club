@@ -116,23 +116,12 @@ export class SuggestionController {
         where.status = status;
       }
 
-      const userWhere: any = {};
       if (search && typeof search === 'string' && search.trim()) {
         const q = `%${search.trim()}%`;
-        Object.assign(where, {
-          [Op.or]: [
-            { message: { [Op.iLike]: q } },
-            { subject: { [Op.iLike]: q } },
-          ],
-        });
-        Object.assign(userWhere, {
-          [Op.or]: [
-            { full_name: { [Op.iLike]: q } },
-            { email: { [Op.iLike]: q } },
-            { phone: { [Op.iLike]: q } },
-            { member_id: { [Op.iLike]: q } },
-          ],
-        });
+        where[Op.or] = [
+          { message: { [Op.iLike]: q } },
+          { subject: { [Op.iLike]: q } },
+        ];
       }
 
       const userInclude: any = {
@@ -144,9 +133,10 @@ export class SuggestionController {
           'email',
           'phone',
           'profile_image',
-          'member_id',
-          'company_name',
-          'category',
+          'membership_number',
+          'business_name',
+          'business_category',
+          'designation',
         ],
         required: false,
       };
