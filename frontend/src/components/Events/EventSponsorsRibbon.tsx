@@ -146,14 +146,14 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
 
   const animateToNext = (nextIdx: number) => {
     Animated.timing(fadeAnim, {
-      toValue: 0.2,
-      duration: 150,
+      toValue: 0.15,
+      duration: 120,
       useNativeDriver: true,
     }).start(() => {
       setCurrentIndex(nextIdx);
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 200,
+        duration: 160,
         useNativeDriver: true,
       }).start();
     });
@@ -164,17 +164,12 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
     animateToNext(next);
   };
 
-  const handlePrev = () => {
-    const prev = (currentIndex - 1 + totalCount) % totalCount;
-    animateToNext(prev);
-  };
-
-  // Auto-slide loop every 3.5 seconds
+  // Auto-slide loop every 3 seconds
   useEffect(() => {
     const timer = setInterval(() => {
       if (isPausedRef.current) return;
       handleNext();
-    }, 3500);
+    }, 3000);
 
     return () => clearInterval(timer);
   }, [currentIndex]);
@@ -187,49 +182,28 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
     if (currentSponsor.eventId) {
       router.push(`/event/${currentSponsor.eventId}` as any);
     } else if (currentSponsor.website) {
-      Linking.openURL(currentSponsor.website).catch(() => {});
+      Linking.openURL(currentSponsor.website).catch(() => { });
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Ribbon Header Row */}
+      {/* Compact Header Row */}
       <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          <View style={styles.ribbonBadge}>
-            <View style={styles.livePulseDot} />
-            <Text style={styles.ribbonBadgeText}>OFFICIAL PARTNERS</Text>
-          </View>
-          <Text style={styles.title}>Tournament Sponsors</Text>
+        <View style={styles.ribbonBadge}>
+          <View style={styles.livePulseDot} />
+          <Text style={styles.ribbonBadgeText}>OFFICIAL PARTNER</Text>
         </View>
 
-        <View style={styles.headerRightControls}>
-          <Pressable
-            style={styles.navArrowBtn}
-            onPress={handlePrev}
-            hitSlop={8}
-          >
-            <MaterialIcons name="chevron-left" size={20} color="#475569" />
-          </Pressable>
-
-          <View style={styles.counterPill}>
-            <MaterialIcons name="star" size={12} color="#B45309" />
-            <Text style={styles.counterText}>
-              {currentIndex + 1}/{totalCount}
-            </Text>
-          </View>
-
-          <Pressable
-            style={styles.navArrowBtn}
-            onPress={handleNext}
-            hitSlop={8}
-          >
-            <MaterialIcons name="chevron-right" size={20} color="#475569" />
-          </Pressable>
+        <View style={styles.counterPill}>
+          <MaterialIcons name="star" size={11} color="#B45309" />
+          <Text style={styles.counterText}>
+            {currentIndex + 1}/{totalCount}
+          </Text>
         </View>
       </View>
 
-      {/* Main Full-Width Sponsor Showcase Card */}
+      {/* Compact Sponsor Banner Item */}
       <Animated.View
         style={[
           styles.cardAnimatedWrap,
@@ -239,7 +213,7 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
         <Pressable
           style={({ pressed }) => [
             styles.card,
-            { borderTopColor: currentSponsor.topColor },
+            { borderLeftColor: currentSponsor.topColor },
             pressed && styles.cardPressed,
           ]}
           onPress={handleCardPress}
@@ -249,33 +223,10 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
           onPressOut={() => {
             setTimeout(() => {
               isPausedRef.current = false;
-            }, 3000);
+            }, 2500);
           }}
         >
-          {/* Card Top Row: Tier Pill + Action Link */}
-          <View style={styles.cardHeader}>
-            <View
-              style={[
-                styles.tierBadge,
-                {
-                  backgroundColor: currentSponsor.badgeBg,
-                  borderColor: currentSponsor.badgeBorder,
-                },
-              ]}
-            >
-              <MaterialIcons name="star" size={12} color={currentSponsor.accentColor} />
-              <Text style={[styles.tierText, { color: currentSponsor.badgeText }]}>
-                {currentSponsor.tierLabel}
-              </Text>
-            </View>
-
-            <View style={styles.actionChip}>
-              <Text style={styles.actionChipText}>View Details</Text>
-              <MaterialIcons name="arrow-forward" size={13} color={Colors.primary} />
-            </View>
-          </View>
-
-          {/* Large High-Contrast Logo Box */}
+          {/* Left: Compact Logo Container */}
           <View style={styles.logoContainer}>
             <Image
               source={currentSponsor.logo}
@@ -284,22 +235,40 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
             />
           </View>
 
-          {/* Sponsor Brand Name */}
-          <Text style={styles.sponsorName} numberOfLines={1}>
-            {currentSponsor.name}
-          </Text>
+          {/* Right: Partner Info & Fixture */}
+          <View style={styles.infoCol}>
+            <View style={styles.tierRow}>
+              <View
+                style={[
+                  styles.tierBadge,
+                  {
+                    backgroundColor: currentSponsor.badgeBg,
+                    borderColor: currentSponsor.badgeBorder,
+                  },
+                ]}
+              >
+                <MaterialIcons name="star" size={9} color={currentSponsor.accentColor} />
+                <Text style={[styles.tierText, { color: currentSponsor.badgeText }]}>
+                  {currentSponsor.tierLabel}
+                </Text>
+              </View>
+            </View>
 
-          {/* Sponsoring Fixture Pill */}
-          <View style={styles.eventPill}>
-            <MaterialIcons name="sports-cricket" size={13} color="#475569" />
-            <Text style={styles.eventPillText} numberOfLines={1}>
-              {currentSponsor.eventName}
+            <Text style={styles.sponsorName} numberOfLines={1}>
+              {currentSponsor.name}
             </Text>
+
+            <View style={styles.eventPill}>
+              <MaterialIcons name="sports-cricket" size={10} color="#64748B" />
+              <Text style={styles.eventPillText} numberOfLines={1}>
+                {currentSponsor.eventName}
+              </Text>
+            </View>
           </View>
         </Pressable>
       </Animated.View>
 
-      {/* Slide Indicator Dots with Direct Tap Navigation */}
+      {/* Compact Indicator Dots */}
       <View style={styles.dotsContainer}>
         {PREMIER_PARTNERS.map((_, i) => (
           <Pressable
@@ -319,83 +288,57 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: Spacing.sm,
+    marginVertical: 4,
     backgroundColor: '#FFFFFF',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radius.lg,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     ...Shadows.sm,
   },
   headerRow: {
-    marginBottom: Spacing.sm,
+    marginBottom: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerLeft: {
-    flexDirection: 'column',
-    gap: 3,
-  },
   ribbonBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: '#F1F5F9',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
     borderRadius: Radius.round,
-    alignSelf: 'flex-start',
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
   livePulseDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#10B981',
   },
   ribbonBadgeText: {
-    fontSize: 9,
+    fontSize: 8.5,
     fontWeight: '800',
     color: '#475569',
-    letterSpacing: 0.8,
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#0F172A',
-    letterSpacing: -0.2,
-  },
-  headerRightControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  navArrowBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    letterSpacing: 0.6,
   },
   counterPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
     borderRadius: Radius.round,
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
   counterText: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: '800',
     color: '#92400E',
   },
@@ -403,116 +346,88 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   card: {
-    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#F8FAFC',
-    borderRadius: Radius.md,
-    padding: Spacing.md,
+    borderRadius: Radius.sm,
+    padding: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderTopWidth: 4,
-    alignItems: 'center',
-    ...Shadows.sm,
+    borderLeftWidth: 3.5,
+    gap: 10,
   },
   cardPressed: {
+    opacity: 0.94,
     transform: [{ scale: 0.99 }],
-    opacity: 0.95,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: Spacing.sm,
-  },
-  tierBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.round,
-    borderWidth: 1,
-  },
-  tierText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-  },
-  actionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.round,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  actionChipText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.primary,
   },
   logoContainer: {
-    width: '100%',
-    height: 80,
+    width: 60,
+    height: 44,
     backgroundColor: '#FFFFFF',
-    borderRadius: Radius.md,
+    borderRadius: Radius.xs,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.sm,
-    padding: Spacing.sm,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
+    padding: 3,
   },
   logoImage: {
     width: '100%',
     height: '100%',
   },
+  infoCol: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 2,
+  },
+  tierRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tierBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2.5,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: Radius.round,
+    borderWidth: 1,
+  },
+  tierText: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    letterSpacing: -0.1,
+  },
   sponsorName: {
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: '800',
     color: '#0F172A',
-    textAlign: 'center',
-    marginBottom: 6,
   },
   eventPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#EEF2F6',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: Radius.round,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    gap: 3,
   },
   eventPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#334155',
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
   },
   dotsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    marginTop: Spacing.sm,
+    gap: 4,
+    marginTop: 6,
   },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 4.5,
+    height: 4.5,
+    borderRadius: 2.25,
     backgroundColor: '#CBD5E1',
   },
   dotActive: {
-    width: 18,
+    width: 12,
     backgroundColor: Colors.primary,
     borderRadius: Radius.round,
   },

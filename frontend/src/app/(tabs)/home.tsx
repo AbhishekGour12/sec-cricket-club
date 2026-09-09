@@ -376,12 +376,12 @@ export default function HomeScreen() {
 
         {isApproved ? (
           <>
+            <EventSponsorsRibbon events={featuredEvents} />
             <FeaturedEventsCarousel
               events={featuredEvents}
               isLoading={featuredLoading}
               onPressEvent={openEvent}
             />
-            <EventSponsorsRibbon events={featuredEvents} />
             <UpcomingEventsPreview
               events={upcomingPreview}
               isLoading={upcomingLoading}
@@ -418,10 +418,6 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* Member Suggestions & Feedback Box */}
-        <SectionHeader title="Member Suggestions & Feedback" />
-        <SuggestionBoxCard />
-
         {/* Latest News Announcement */}
         <SectionHeader
           title="Latest News"
@@ -430,6 +426,19 @@ export default function HomeScreen() {
         />
         <HomeAnnouncements />
       </ScrollView>
+
+      {/* Floating Suggestion & Feedback Action Button */}
+      <Pressable
+        style={({ pressed }) => [
+          styles.suggestionFab,
+          pressed && { opacity: 0.9, transform: [{ scale: 0.95 }] },
+        ]}
+        onPress={() => router.push('/suggestions' as any)}
+        accessibilityLabel="Open Suggestions & Complaints"
+      >
+        <ThemeIcon name="announcement" size={18} color="#FFFFFF" />
+        <Text style={styles.suggestionFabText}>Feedback</Text>
+      </Pressable>
     </SafeAreaView>
   );
 }
@@ -779,5 +788,31 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     marginTop: 2,
+  },
+  suggestionFab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 18,
+    backgroundColor: Colors.secondary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: Radius.round,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+    zIndex: 99,
+  },
+  suggestionFabText: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
 });
