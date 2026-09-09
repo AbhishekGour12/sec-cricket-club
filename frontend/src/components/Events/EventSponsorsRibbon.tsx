@@ -203,7 +203,7 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
         </View>
       </View>
 
-      {/* Centered Sponsor Banner Item */}
+      {/* Fully Centered Sponsor Banner Item */}
       <Animated.View
         style={[
           styles.cardAnimatedWrap,
@@ -242,28 +242,26 @@ export function EventSponsorsRibbon({ events, onPressSponsor }: EventSponsorsRib
             </Text>
           </View>
 
-          {/* Centered Content: Logo & Details */}
-          <View style={styles.centerContentRow}>
-            <View style={styles.logoContainer}>
-              <Image
-                source={currentSponsor.logo}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-            </View>
+          {/* Centered Logo */}
+          <View style={styles.logoContainer}>
+            <Image
+              source={currentSponsor.logo}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
 
-            <View style={styles.infoCol}>
-              <Text style={styles.sponsorName} numberOfLines={1}>
-                {currentSponsor.name}
-              </Text>
+          {/* Centered Sponsor Name */}
+          <Text style={styles.sponsorName} numberOfLines={1}>
+            {currentSponsor.name}
+          </Text>
 
-              <View style={styles.eventPill}>
-                <MaterialIcons name="sports-cricket" size={11} color="#64748B" />
-                <Text style={styles.eventPillText} numberOfLines={1}>
-                  {currentSponsor.eventName}
-                </Text>
-              </View>
-            </View>
+          {/* Centered Event Pill */}
+          <View style={styles.eventPill}>
+            <MaterialIcons name="sports-cricket" size={11} color="#64748B" />
+            <Text style={styles.eventPillText} numberOfLines={1}>
+              {currentSponsor.eventName}
+            </Text>
           </View>
         </Pressable>
       </Animated.View>
@@ -347,8 +345,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: Radius.lg,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     gap: 6,
@@ -363,7 +361,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'center',
     gap: 3,
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: Radius.round,
     borderWidth: 1,
@@ -373,52 +371,45 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.2,
   },
-  centerContentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    width: '100%',
-  },
   logoContainer: {
-    width: 64,
-    height: 44,
+    width: 100,
+    height: 52,
     backgroundColor: '#F8FAFC',
     borderRadius: Radius.sm,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 3,
+    padding: 4,
+    marginVertical: 4,
   },
   logoImage: {
     width: '100%',
     height: '100%',
-  },
-  infoCol: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    gap: 3,
+    alignSelf: 'center',
   },
   sponsorName: {
-    fontSize: 13.5,
+    fontSize: 14,
     fontWeight: '800',
     color: '#0F172A',
+    textAlign: 'center',
   },
   eventPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3.5,
+    alignSelf: 'center',
+    gap: 4,
     backgroundColor: '#F1F5F9',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
     borderRadius: Radius.round,
   },
   eventPillText: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '600',
     color: '#64748B',
+    textAlign: 'center',
   },
   dotsContainer: {
     flexDirection: 'row',

@@ -193,6 +193,7 @@ export class SuggestionController {
         suggestionsCount,
         complaintsCount,
         feedbackCount,
+        generalCount,
       ] = await Promise.all([
         Suggestion.count(),
         Suggestion.count({ where: { status: 'Pending' } }),
@@ -202,6 +203,7 @@ export class SuggestionController {
         Suggestion.count({ where: { type: 'Suggestion' } }),
         Suggestion.count({ where: { type: 'Complaint' } }),
         Suggestion.count({ where: { type: 'Feedback' } }),
+        Suggestion.count({ where: { type: 'General' } }),
       ]);
 
       res.status(200).json({
@@ -214,6 +216,7 @@ export class SuggestionController {
           suggestion: suggestionsCount,
           complaint: complaintsCount,
           feedback: feedbackCount,
+          general: generalCount,
         },
       });
     } catch (error) {

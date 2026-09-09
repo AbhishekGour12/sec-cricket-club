@@ -56,8 +56,8 @@ export default function SuggestionsScreen() {
       return;
     }
 
-    if (trimmedMessage.length < 10) {
-      toast.showError('Too Short', 'Please enter at least 10 characters so we can understand your feedback.');
+    if (trimmedMessage.length < 4) {
+      toast.showError('Too Short', 'Please enter at least 4 characters so we can understand your feedback.');
       return;
     }
 
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Spacing.lg,
-    paddingBottom: Spacing.xxl * 2,
+    paddingBottom: 150,
   },
   noticeCard: {
     flexDirection: 'row',
@@ -607,23 +607,28 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   submitBtn: {
-    backgroundColor: Colors.primary,
+    backgroundColor: '#DC2626',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: Radius.md,
+    gap: 10,
+    paddingVertical: 16,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+    borderColor: '#B91C1C',
     ...Shadows.md,
+    marginTop: 6,
   },
   submitBtnDisabled: {
-    opacity: 0.6,
+    opacity: 0.55,
+    backgroundColor: '#94A3B8',
+    borderColor: '#94A3B8',
   },
   submitBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.2,
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.4,
   },
   loadingBox: {
     paddingVertical: 60,

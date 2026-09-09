@@ -175,6 +175,8 @@ router.delete('/admin/suggestions/:id', verifyAdminJwt as any, SuggestionControl
 
 // Mobile Suggestions (User feedback & complaints)
 router.post('/suggestions', verifyJwt as any, SuggestionController.create);
+router.post('/me/suggestions', verifyJwt as any, SuggestionController.create);
+router.get('/suggestions', verifyJwt as any, SuggestionController.getMySuggestions);
 router.get('/me/suggestions', verifyJwt as any, SuggestionController.getMySuggestions);
 
 // Mobile Announcements (approved members only — enforced in controller via JWT + published filter)
