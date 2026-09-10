@@ -523,11 +523,7 @@ export const Members: React.FC = () => {
     if (!manualForm.email.trim()) errors.email = 'Email address is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(manualForm.email.trim())) errors.email = 'Invalid email format';
 
-    if (!manualForm.phone.trim()) errors.phone = 'Mobile number is required';
-    else if (!/^[+]?[\d\s-]{10,15}$/.test(manualForm.phone.trim())) errors.phone = 'Invalid phone number (min 10 digits)';
-
-    if (!manualForm.membership_number.trim()) errors.membership_number = 'Membership ID is required';
-    if (!manualForm.business_name.trim()) errors.business_name = 'Business name is required';
+    if (manualForm.phone.trim() && !/^[+]?[\d\s-]{10,15}$/.test(manualForm.phone.trim())) errors.phone = 'Invalid phone number (min 10 digits)';
 
     if (Object.keys(errors).length > 0) {
       setManualErrors(errors);
@@ -642,11 +638,13 @@ export const Members: React.FC = () => {
           valid: validated.length - errorCount,
           errors: errorCount,
         });
-      } catch {
+        setIsImportModalOpen(true);
+      } catch (err) {
         alert('Failed to parse spreadsheet file. Please verify CSV/Excel format.');
       }
     };
     reader.readAsBinaryString(file);
+    e.target.value = '';
   };
 
   const handleCommitImport = async () => {
@@ -1638,12 +1636,11 @@ export const Members: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-bold text-[#3A4260] uppercase mb-1">
-                      Membership Number *
+                      Membership Number <span className="text-slate-400 font-normal lowercase">(optional - auto assigned)</span>
                     </label>
                     <input
                       type="text"
-                      required
-                      placeholder="e.g. SEC0042"
+                      placeholder="e.g. SEC-1 (Leave blank to auto-generate)"
                       value={manualForm.membership_number}
                       onChange={(e) => setManualForm({ ...manualForm, membership_number: e.target.value })}
                       className={`w-full px-3 py-2 border rounded-xl text-xs focus:outline-none focus:border-[#C41230] ${manualErrors.membership_number ? 'border-red-400' : 'border-slate-200'}`}

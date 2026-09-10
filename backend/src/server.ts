@@ -112,6 +112,14 @@ const startServer = async () => {
       logger.info('Administrator credentials updated successfully.');
     }
 
+    // Ensure all existing members have valid sequential SEC-N membership numbers
+    const membersWithoutId = (await User.count({ where: { membership_number: null as any } })) as number;
+    if (membersWithoutId > 0) {
+      logger.info(`Found ${membersWithoutId} members without membership_number. Running auto-assignment...`);
+      const { migrateMembershipNumbers } = await import('./scripts/migrate-membership-numbers');
+      await migrateMembershipNumbers();
+    }
+
     // Start Express listener on all network interfaces (0.0.0.0)
     app.listen(Number(PORT), '0.0.0.0', () => {
       logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT} (bound to 0.0.0.0)`);

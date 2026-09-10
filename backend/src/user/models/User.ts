@@ -348,4 +348,13 @@ User.init(
   }
 );
 
+User.beforeCreate(async (user: User, options) => {
+  if (!user.membership_number || user.membership_number.trim() === '') {
+    const { generateNextMembershipNumber } = await import('../../utils/membershipNumber');
+    user.membership_number = await generateNextMembershipNumber(options?.transaction);
+  } else {
+    user.membership_number = user.membership_number.trim();
+  }
+});
+
 export default User;

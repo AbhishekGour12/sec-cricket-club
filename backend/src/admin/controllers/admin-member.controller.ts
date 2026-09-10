@@ -27,10 +27,10 @@ export class AdminMemberActionsController {
       } = req.body;
 
       // 1. Check required fields
-      if (!full_name || !email || !membership_number || !business_name || !business_category) {
+      if (!full_name || !email || !business_name || !business_category) {
         res.status(400).json({
           error: 'Bad Request',
-          message: 'Missing required fields. Name, Email, Membership Number, Business Name, and Category are required.',
+          message: 'Missing required fields. Name, Email, Business Name, and Category are required.',
         });
         return;
       }
@@ -49,13 +49,16 @@ export class AdminMemberActionsController {
         return;
       }
 
-      const memberNumExists = await User.findOne({ where: { membership_number } });
-      if (memberNumExists) {
-        res.status(400).json({
-          error: 'Conflict',
-          message: `A member with membership number ${membership_number} already exists.`,
-        });
-        return;
+      const cleanMembershipNumber = membership_number ? String(membership_number).trim() : undefined;
+      if (cleanMembershipNumber) {
+        const memberNumExists = await User.findOne({ where: { membership_number: cleanMembershipNumber } });
+        if (memberNumExists) {
+          res.status(400).json({
+            error: 'Conflict',
+            message: `A member with membership number ${cleanMembershipNumber} already exists.`,
+          });
+          return;
+        }
       }
 
       // Two members can never share a mobile number.
@@ -74,7 +77,7 @@ export class AdminMemberActionsController {
         email: email.trim().toLowerCase(),
         full_name: full_name.trim(),
         phone: phoneCheck.normalized || undefined,
-        membership_number: membership_number.trim(),
+        membership_number: cleanMembershipNumber || undefined,
         designation: designation ? String(designation).trim() : 'Associate Member',
         business_name: business_name.trim(),
         business_category: business_category.trim(),
