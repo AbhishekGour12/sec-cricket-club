@@ -24,7 +24,6 @@
       "ios": {
         "simulator": false
       },
-      "autoIncrement": true,
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_PUBLIC_API_URL": "https://sec-api.duckdns.org/api",
@@ -39,7 +38,6 @@
       }
     },
     "production": {
-      "autoIncrement": true,
       "ios": {
         "resourceClass": "m-medium"
       },
